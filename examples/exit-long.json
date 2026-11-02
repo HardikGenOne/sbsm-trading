@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "strategy_id": "SBSM",
+  "strategy_version": "1.0.0",
+  "strategy_instance_id": "SBSM:1.0.0:NSE:ICICIBANK:120:lb=4;gap=0.16;noise=15;atr=15;factor=1.8;wma=20",
+  "config_key": "lb=4;gap=0.16;noise=15;atr=15;factor=1.8;wma=20",
+  "event_id": "SBSM:1.0.0:NSE:ICICIBANK:120:lb=4;gap=0.16;noise=15;atr=15;factor=1.8;wma=20:1794289500000:EXIT_LONG",
+  "trade_cycle_id": "SBSM:1.0.0:NSE:ICICIBANK:120:lb=4;gap=0.16;noise=15;atr=15;factor=1.8;wma=20:1793598300000",
+  "exchange": "NSE",
+  "symbol": "ICICIBANK",
+  "ticker_id": "NSE:ICICIBANK",
+  "timeframe": "120",
+  "action": "EXIT_LONG",
+  "reason": "SBSM_SELL",
+  "signal_bar_open_ms": 1794282300000,
+  "signal_bar_close_ms": 1794289500000,
+  "emitted_at_ms": 1794289500500,
+  "reference_price": 1350.0
+}

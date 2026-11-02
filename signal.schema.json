@@ -1,0 +1,494 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SBSM equity signal v1",
+  "description": "Validate cross-field IDs, timestamps and approved configuration in application code as well.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "strategy_id",
+    "strategy_version",
+    "strategy_instance_id",
+    "config_key",
+    "event_id",
+    "trade_cycle_id",
+    "exchange",
+    "symbol",
+    "ticker_id",
+    "timeframe",
+    "action",
+    "reason",
+    "signal_bar_open_ms",
+    "signal_bar_close_ms",
+    "emitted_at_ms",
+    "reference_price"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "strategy_id": {
+      "const": "SBSM"
+    },
+    "strategy_version": {
+      "const": "1.0.0"
+    },
+    "strategy_instance_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "config_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200
+    },
+    "trade_cycle_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200
+    },
+    "exchange": {
+      "const": "NSE"
+    },
+    "symbol": {
+      "enum": [
+        "POLYCAB",
+        "ADANIENT",
+        "APARINDS",
+        "APLAPOLLO",
+        "BAJAJ_AUTO",
+        "BEL",
+        "BHEL",
+        "BSE",
+        "CANBK",
+        "CONCOR",
+        "EICHERMOT",
+        "FORTIS",
+        "HINDCOPPER",
+        "ICICIBANK",
+        "LAURUSLABS",
+        "M&MFIN",
+        "MCX",
+        "NTPC",
+        "SBIN",
+        "ZYDUSLIFE"
+      ]
+    },
+    "ticker_id": {
+      "enum": [
+        "NSE:POLYCAB",
+        "NSE:ADANIENT",
+        "NSE:APARINDS",
+        "NSE:APLAPOLLO",
+        "NSE:BAJAJ_AUTO",
+        "NSE:BEL",
+        "NSE:BHEL",
+        "NSE:BSE",
+        "NSE:CANBK",
+        "NSE:CONCOR",
+        "NSE:EICHERMOT",
+        "NSE:FORTIS",
+        "NSE:HINDCOPPER",
+        "NSE:ICICIBANK",
+        "NSE:LAURUSLABS",
+        "NSE:M&MFIN",
+        "NSE:MCX",
+        "NSE:NTPC",
+        "NSE:SBIN",
+        "NSE:ZYDUSLIFE"
+      ]
+    },
+    "timeframe": {
+      "const": "120"
+    },
+    "action": {
+      "enum": [
+        "ENTER_LONG",
+        "EXIT_LONG"
+      ]
+    },
+    "reason": {
+      "enum": [
+        "SBSM_BUY",
+        "SBSM_SELL"
+      ]
+    },
+    "signal_bar_open_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "signal_bar_close_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "emitted_at_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reference_price": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ENTER_LONG"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "SBSM_BUY"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "EXIT_LONG"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "SBSM_SELL"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "POLYCAB"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:POLYCAB"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "ADANIENT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:ADANIENT"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "APARINDS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:APARINDS"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "APLAPOLLO"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:APLAPOLLO"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "BAJAJ_AUTO"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:BAJAJ_AUTO"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "BEL"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:BEL"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "BHEL"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:BHEL"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "BSE"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:BSE"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "CANBK"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:CANBK"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "CONCOR"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:CONCOR"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "EICHERMOT"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:EICHERMOT"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "FORTIS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:FORTIS"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "HINDCOPPER"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:HINDCOPPER"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "ICICIBANK"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:ICICIBANK"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "LAURUSLABS"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:LAURUSLABS"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "M&MFIN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:M&MFIN"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "MCX"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:MCX"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "NTPC"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:NTPC"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "SBIN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:SBIN"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "symbol": {
+            "const": "ZYDUSLIFE"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ticker_id": {
+            "const": "NSE:ZYDUSLIFE"
+          }
+        }
+      }
+    }
+  ]
+}

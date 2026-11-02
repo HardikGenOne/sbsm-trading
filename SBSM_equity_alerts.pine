@@ -1,0 +1,146 @@
+//@version=5
+strategy("SBSM Equities 2H | Webhook v1.0.0", overlay=true, initial_capital=500000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, pyramiding=0, calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=false)
+
+// 1. Protocol identity. Bump VERSION when changing signal logic or payload semantics.
+// Chart strategy orders are for visual backtesting only. The server owns real positions.
+string STRATEGY_ID = "SBSM"
+string VERSION = "1.0.0"
+
+// 2. Original SBSM parameters.
+string STRATEGY_GROUP = "SBSM settings"
+int lookback = input.int(4, "Breakout lookback", minval=1, group=STRATEGY_GROUP)
+float gapLimit = input.float(0.16, "Maximum gap above previous high (%)", minval=0.0, step=0.01, group=STRATEGY_GROUP)
+int noiseBars = input.int(15, "Signal cooldown (bars, includes exits)", minval=0, group=STRATEGY_GROUP)
+string INDICATOR_GROUP = "Indicator settings"
+int stPeriod = input.int(15, "Supertrend ATR period", minval=1, group=INDICATOR_GROUP)
+float stFactor = input.float(1.8, "Supertrend factor", minval=0.01, step=0.1, group=INDICATOR_GROUP)
+int maPeriod = input.int(20, "WMA period", minval=1, group=INDICATOR_GROUP)
+
+// 3. Deployment eligibility. Show diagnostics instead of aborting on bar zero.
+// Backtesting works on standard charts, including indices. Webhooks have stricter rules.
+string allowedSymbols = "|POLYCAB|ADANIENT|APARINDS|APLAPOLLO|BAJAJ_AUTO|BEL|BHEL|BSE|CANBK|CONCOR|EICHERMOT|FORTIS|HINDCOPPER|ICICIBANK|LAURUSLABS|M&MFIN|MCX|NTPC|SBIN|ZYDUSLIFE|"
+bool correctTimeframe = timeframe.isminutes and timeframe.multiplier == 120
+bool correctMarket = syminfo.prefix == "NSE" and syminfo.type == "stock"
+bool approvedSymbol = str.contains(allowedSymbols, "|" + syminfo.ticker + "|")
+bool chartEligible = chart.is_standard and correctTimeframe and correctMarket and approvedSymbol
+string chartStatus = "READY - alerts enabled"
+if not chart.is_standard
+    chartStatus := "BLOCKED - use standard candlesticks"
+else if not correctTimeframe
+    chartStatus := "BLOCKED - select 2H / 120 minutes"
+else if not correctMarket
+    chartStatus := "BLOCKED - select an NSE stock (not an index)"
+else if not approvedSymbol
+    chartStatus := "BLOCKED - stock outside approved list"
+
+// 4. Identity includes settings so different configurations cannot share a trade cycle.
+// Use fixed decimal formatting, independent of each stock's minimum price tick.
+string configKey = "lb=" + str.tostring(lookback)
+configKey += ";gap=" + str.tostring(gapLimit, "0.########")
+configKey += ";noise=" + str.tostring(noiseBars)
+configKey += ";atr=" + str.tostring(stPeriod)
+configKey += ";factor=" + str.tostring(stFactor, "0.########")
+configKey += ";wma=" + str.tostring(maPeriod)
+string instanceId = STRATEGY_ID + ":" + VERSION + ":" + syminfo.tickerid + ":" + timeframe.period + ":" + configKey
+
+// 5. JSON serialization. Prices are JSON numbers, timestamps are epoch milliseconds.
+f_quote(string value) =>
+    string escaped = str.replace_all(value, "\\", "\\\\")
+    escaped := str.replace_all(escaped, "\"", "\\\"")
+    escaped := str.replace_all(escaped, "\n", "\\n")
+    escaped := str.replace_all(escaped, "\r", "\\r")
+    escaped := str.replace_all(escaped, "\t", "\\t")
+    "\"" + escaped + "\""
+
+f_payload(string action, string cycleId, string reason) =>
+    string eventId = instanceId + ":" + str.tostring(time_close) + ":" + action
+    string message = "{"
+    message += "\"schema_version\":1"
+    message += ",\"strategy_id\":" + f_quote(STRATEGY_ID)
+    message += ",\"strategy_version\":" + f_quote(VERSION)
+    message += ",\"strategy_instance_id\":" + f_quote(instanceId)
+    message += ",\"config_key\":" + f_quote(configKey)
+    message += ",\"event_id\":" + f_quote(eventId)
+    message += ",\"trade_cycle_id\":" + f_quote(cycleId)
+    message += ",\"exchange\":" + f_quote(syminfo.prefix)
+    message += ",\"symbol\":" + f_quote(syminfo.ticker)
+    message += ",\"ticker_id\":" + f_quote(syminfo.tickerid)
+    message += ",\"timeframe\":" + f_quote(timeframe.period)
+    message += ",\"action\":" + f_quote(action)
+    message += ",\"reason\":" + f_quote(reason)
+    message += ",\"signal_bar_open_ms\":" + str.tostring(time)
+    message += ",\"signal_bar_close_ms\":" + str.tostring(time_close)
+    message += ",\"emitted_at_ms\":" + str.tostring(timenow)
+    message += ",\"reference_price\":" + str.tostring(close, format.mintick)
+    message += "}"
+    message
+
+// 6. Original calculations and indexing, deliberately preserved.
+[stValue, stDirection] = ta.supertrend(stFactor, stPeriod)
+float maValue = ta.wma(close, maPeriod)
+float prevGreenLine = ta.highest(high[1], lookback)[1]
+float prevRedLine = ta.lowest(low[1], lookback)[1]
+bool isAboveMA = close[1] > maValue[1]
+bool setupBuy = close[1] > prevGreenLine and stDirection[1] < 0 and isAboveMA
+bool setupSell = close[1] < prevRedLine
+float currentGap = ((open - high[1]) / high[1]) * 100
+bool isGapValid = currentGap <= gapLimit
+
+// 7. Signal state, independent of strategy.position_size and server fills.
+// Historical evaluation reconstructs the cycle; only realtime events are delivered.
+var int trendState = 0
+var int lastSignalBar = 0
+var string activeCycleId = ""
+bool isCleanChart = (bar_index - lastSignalBar) >= noiseBars
+bool buySignal = false
+bool sellSignal = false
+
+// Do not apply the execution-stock allowlist to historical strategy calculations.
+if barstate.isconfirmed and chart.is_standard
+    if setupBuy and isGapValid and trendState != 1 and isCleanChart
+        trendState := 1
+        lastSignalBar := bar_index
+        activeCycleId := instanceId + ":" + str.tostring(time_close)
+        buySignal := true
+        // Disable emulator-fill alerts: webhook messages come only from alert().
+        strategy.entry("Long", strategy.long, disable_alert=true)
+        if barstate.isrealtime and chartEligible
+            alert(f_payload("ENTER_LONG", activeCycleId, "SBSM_BUY"), alert.freq_once_per_bar_close)
+    else if setupSell and trendState != -1 and isCleanChart
+        trendState := -1
+        lastSignalBar := bar_index
+        // Initial flat sell signals still update cooldown, as in the original script.
+        // Emit an exit only when there is an identifiable preceding entry cycle.
+        if activeCycleId != ""
+            sellSignal := true
+            strategy.close("Long", disable_alert=true)
+            if barstate.isrealtime and chartEligible
+                alert(f_payload("EXIT_LONG", activeCycleId, "SBSM_SELL"), alert.freq_once_per_bar_close)
+            activeCycleId := ""
+
+// 8. Chart diagnostics. Markers show signals, not server executions.
+plot(maValue, color=color.orange, linewidth=2, title="WMA filter")
+plot(prevGreenLine, color=color.new(color.green, 65), title="Previous breakout high")
+plot(prevRedLine, color=color.new(color.red, 65), title="Previous breakout low")
+plot(stDirection < 0 ? stValue : na, color=color.green, style=plot.style_linebr, title="Bullish Supertrend")
+plotshape(buySignal, title="Entry signal", text="BUY", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.tiny)
+plotshape(sellSignal, title="Exit signal", text="EXIT", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.tiny)
+
+// The status describes script eligibility, not broker health or webhook delivery.
+var table statusPanel = table.new(position.top_right, 2, 7, border_width=1)
+if barstate.islast
+    color statusColor = chartEligible ? color.new(color.green, 20) : color.new(color.red, 20)
+    table.cell(statusPanel, 0, 0, "Webhook eligibility", bgcolor=statusColor, text_color=color.white)
+    table.cell(statusPanel, 1, 0, chartStatus, bgcolor=statusColor, text_color=color.white)
+    table.cell(statusPanel, 0, 1, "Detected ticker", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 1, 1, syminfo.tickerid, bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 0, 2, "Exchange", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 1, 2, syminfo.prefix, bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 0, 3, "Instrument type", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 1, 3, syminfo.type, bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 0, 4, "Timeframe", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 1, 4, timeframe.period, bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 0, 5, "Chart", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 1, 5, chart.is_standard ? "Standard" : "Synthetic", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 0, 6, "Strategy backtest", bgcolor=color.black, text_color=color.white)
+    table.cell(statusPanel, 1, 6, chart.is_standard ? "ACTIVE - subject to SBSM signals" : "BLOCKED - use standard candles", bgcolor=color.black, text_color=color.white)
