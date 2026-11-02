@@ -31,7 +31,10 @@ def main():
             try:
                 engine.step()
                 if settings.feed_mode == "kite" and calendar.is_open(now_ms()):
-                    for quote in feed.fetch(engine.watch_symbols()):
+                    # A single read-only probe keeps feed readiness observable before
+                    # the first signal; never synthesize an entry just to test access.
+                    symbols = engine.watch_symbols() or ["ICICIBANK"]
+                    for quote in feed.fetch(symbols):
                         engine.quote(quote, "kite")
                 engine.step()
             except Exception as exc:

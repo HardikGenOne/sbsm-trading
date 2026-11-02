@@ -16,6 +16,7 @@ from .engine import PaperEngine, RateLimited, SignalConflict, now_ms
 from .market import MarketCalendar
 from .models import Audit, Conflict, Event, Fill, Ledger, Order, Position
 from .schemas import QuoteInput, Signal
+from .readiness import report as readiness_report
 
 
 def create_app(settings=None, database=None, calendar=None, clock=now_ms):
@@ -87,6 +88,10 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
             latest = s.scalars(select(Audit).order_by(Audit.id.desc()).limit(10)).all()
             audits = [row_dict(row) for row in latest]
         return {"mode": "paper", "feed_mode": settings.feed_mode, "worker_recent": 0 <= age < max(30000, int(settings.poll_seconds * 10000)), "market_open": engine.calendar.is_open(clock()), "kite_credentials_configured": bool(settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value()), "recent_audit": audits, "entries_paused": account["entries_paused"], "reconciliation_required": account["reconciliation_required"]}
+
+    @app.get("/api/readiness", dependencies=[Depends(admin)])
+    def readiness():
+        return readiness_report(engine)
 
     @app.get("/api/trades", dependencies=[Depends(admin)])
     def closed_trades(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):

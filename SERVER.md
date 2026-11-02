@@ -19,6 +19,8 @@ The first two steps are already completed in this checkout. Bootstrap preserves 
 - Liveness: http://127.0.0.1:8000/health
 - Run tests: `.venv/bin/python -m pytest`
 - Isolated walkthrough: `.venv/bin/python scripts/demo.py`
+- Passive readiness check: `.venv/bin/python scripts/check_readiness.py`
+- Read-only broker probe: `.venv/bin/python scripts/check_readiness.py --probe-market-data`
 - Stop both processes with Ctrl+C.
 
 In Swagger, use **Authorize**, entering `SBSM_ADMIN_TOKEN` from your local `.env` as the Bearer credential. Do not share `.env` or paste credentials into chat. The two secrets have separate purposes: the admin token cannot authenticate a webhook, and the webhook token cannot access portfolio/control endpoints.
@@ -36,6 +38,10 @@ Default `SBSM_FEED_MODE=kite` uses **read-only** Kite HTTP quote snapshots and t
 5. Observe `/api/status`, `/api/audit`, and quote timestamps in `/api/portfolio` during market hours.
 
 The feed fetches actual tick sizes daily, then best bid/ask prices and their displayed quantities. It ignores instruments without complete two-sided depth. Missing/invalid credentials or unavailable quotes do not produce fake fills. Entries reserve capital, wait, and expire. Exits stay pending until tradable quotes return. Feed failures produce credential-free audit records.
+
+Before any positions or pending orders exist, the worker polls one approved stock (`ICICIBANK`) during market hours to establish feed readiness. It does not create signals or trades for this probe. `/api/readiness` distinguishes a stopped worker, missing credentials, manual-only data, stale quotes, closed sessions, calendar failures, paused entries, and queue delays. `ready_for_new_entries` is an operational check for live-data paper trading, not a promise that an individual signal passes sizing or symbol checks. TradingView delivery is reported as unknown; verify it separately against its alert log.
+
+The readiness script sends the admin credential only to the fixed local API address and does not follow redirects. Its optional broker probe performs read-only instrument/quote requests and reports sanitized error categories. It never submits a signal, places an order, or changes the paper ledger. Exit code 1 means checks are blocked or waiting; a closed market is an expected waiting state.
 
 `SBSM_FEED_MODE=manual` enables authenticated `POST /paper/quotes` for controlled testing. It is explicitly synthetic data; do not use it for live-data paper performance measurement. Manual quotes are forbidden in Kite mode. Neither mode uses a TradingView reference price as an execution fill.
 
@@ -86,6 +92,7 @@ All `/api/*`, `/controls/*`, and `/paper/*` endpoints require `Authorization: Be
 | --- | --- |
 | `GET /api/portfolio` | Pool, cash, reserves, unsettled proceeds, P&L and open positions |
 | `GET /api/status` | Worker heartbeat, market session, configuration and recent audit |
+| `GET /api/readiness` | Passive readiness checklist for live-data paper execution |
 | `GET /api/signals` | Durable receipt sequence, decision and outcome |
 | `GET /api/skipped` | Separate skipped-signal list with allocation details/reasons |
 | `GET /api/orders` | Pending, partial, filled, cancelled and expired orders |
@@ -111,6 +118,7 @@ sbsm/
   database.py     Transactions, SQLite WAL, serialized account writes
   engine.py       Allocation, reservations, order/fill/P&L state machine
   market.py       NSE sessions and read-only Kite quote adapter
+  readiness.py    Passive live-data paper-readiness checklist
   models.py       Persistent accounting and execution entities
   schemas.py      Pine payload and quote validation
   worker.py       Persistent-queue consumer and quote polling process
@@ -119,6 +127,7 @@ scripts/
   run_local.py    Local API + worker supervisor
   kite_login.py   Official manual-login token exchange helper
   demo.py         Disposable deterministic walkthrough
+  check_readiness.py  Safe local diagnostics and optional read-only broker probe
 tests/            Financial invariants, concurrency, restart and API tests
 data/             Private database files (gitignored)
 ```
