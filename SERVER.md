@@ -2,6 +2,8 @@
 
 This is a local, persistent paper engine with a browser dashboard. No broker order-placement endpoint or live execution adapter exists. Authenticated JSON endpoints and Swagger UI are also available.
 
+Cloud hosting and outbound Telegram notifications now have a prepared deployment path. See [CLOUD.md](CLOUD.md) for the supervised container stack, private bot setup, persistence/backups and remaining hosting-access requirements. Preparing these files does not mean a remote service or real Telegram recipient is connected.
+
 ## Run
 
 From this project folder:
@@ -105,6 +107,9 @@ All `/api/*`, `/controls/*`, and `/paper/*` endpoints require `Authorization: Be
 | `GET /api/summary` | Total signals, skipped decisions, active orders and closed trades |
 | `GET /api/status` | Worker heartbeat, market session, configuration and recent audit |
 | `GET /api/readiness` | Passive readiness checklist for live-data paper execution |
+| `GET /api/notifications` | Telegram queue counts and sanitized delivery status |
+| `POST /controls/notifications/test` | Queue a non-financial test to the configured chat |
+| `POST /controls/notifications/{id}/retry` | Explicit retry of a failed message for its original destination |
 | `GET /api/signals` | Durable receipt sequence, decision and outcome |
 | `GET /api/signals/{sequence}/trace` | Full trade-cycle signals, orders, fills, ledger and position |
 | `GET /api/skipped` | Separate skipped-signal list with allocation details/reasons |
@@ -135,6 +140,11 @@ sbsm/
   models.py       Persistent accounting and execution entities
   schemas.py      Pine payload and quote validation
   sessions.py     Signed browser sessions and CSRF tokens
+  notifications.py  Transactional Telegram outbox and retry delivery
+  notifier.py     Independent dispatcher and heartbeat transitions
+  migrations.py   Additive notification schema migration
+  service.py      API/worker/notifier supervision
+  backup.py       Consistent private SQLite snapshots
   static/         Responsive dashboard HTML, CSS and JavaScript
   worker.py       Persistent-queue consumer and quote polling process
 scripts/

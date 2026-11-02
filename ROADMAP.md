@@ -27,6 +27,8 @@ Local dashboard delivered: isolated browser demo, authenticated actual-account v
 
 ## 4. Deploy for continuous access
 
+Deployment source, supervised processes, HTTPS Compose configuration, production host/source-IP checks, online backup tool and durable Telegram notifications are now prepared. Actual cloud provisioning, DNS, secrets, bot binding and remote verification remain pending the user's hosting and recipient details. No public deployment has been verified.
+
 - Private authenticated dashboard, HTTPS TradingView ingress with origin verification, secret-path redaction and edge limits.
 - Persistent supervised worker, database backups, recovery drill, and useful error alerts without routine noise.
 - Choose the production database and implement/test migrations before moving the local ledger. Verify market-data access from the chosen host.

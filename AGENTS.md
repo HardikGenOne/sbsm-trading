@@ -7,6 +7,9 @@
 - Never commit or push .env files, broker credentials, session tokens, databases, logs, caches, or private trading/account data. Keep .env.example free of actual credentials.
 - If a push is blocked by authentication, permissions, or a missing remote, keep local commits and report the exact blocker. Do not claim GitHub is updated unless the remote commit is verified.
 - This milestone is paper execution only. Preserve the ban on live order placement until the user explicitly requests that implementation.
+- Cloud hosting and outbound Telegram trade/system notifications are now authorized. GitHub publishing and broker connection remain deferred. Hosting account, target, budget, and Telegram recipient must be resolved before provisioning paid resources or sending messages; enter secrets locally rather than in chat.
+- Hosting budget is free only. The user explicitly paused Render connection/deployment and source setup until they resume; do not provision paid resources or attempt account connections. Preserve the ledger: free Render has no persistent disk and is not a supported target for the current SQLite stack.
+- Keep notification delivery separate from financial processing. Enqueue in the same transaction as the underlying event; network delivery must never hold the account lock. No Telegram trading commands are authorized.
 - Preserve the agreed trading rules: equities, Zerodha market data, approved 20-stock universe, 2H signals, long only, one position per stock, overnight holding until exit, no automatic stop-loss or daily-loss exits.
 - Allocate 12% of initial capital plus net realized P&L, excluding unrealized changes. Admit entries FIFO, atomically reserve funds, permanently record skipped entries, and match exits by trade cycle.
 - Run the project's virtual-environment pytest suite for financial state-machine changes. Keep simulation assumptions and verification limits documented in SERVER.md.

@@ -1,0 +1,63 @@
+name: sbsm
+services:
+  app:
+    build:
+      context: ..
+    restart: unless-stopped
+    init: true
+    env_file: ../.env.cloud
+    environment:
+      SBSM_DATABASE_URL: sqlite:////app/data/paper.db
+      SBSM_ENVIRONMENT: production
+      SBSM_SESSION_COOKIE_SECURE: "true"
+      SBSM_FORWARDED_ALLOW_IPS: 172.30.88.2
+    volumes:
+      - paper_data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=67108864,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      private:
+        ipv4_address: 172.30.88.3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SBSM_DOMAIN: ${SBSM_DOMAIN:?Set SBSM_DOMAIN in .env.cloud}
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      private:
+        ipv4_address: 172.30.88.2
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+networks:
+  private:
+    ipam:
+      config:
+        - subnet: 172.30.88.0/24
+volumes:
+  paper_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,20 @@
+{
+    log default {
+        format filter {
+            wrap json
+            fields {
+                request delete
+            }
+        }
+    }
+}
+
+{$SBSM_DOMAIN} {
+    # Access logging intentionally remains disabled: webhook paths contain credentials.
+    encode gzip zstd
+    request_body {
+        max_size 16KB
+    }
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy app:8000
+}
