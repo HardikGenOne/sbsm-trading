@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.engine import make_url
 
 from .models import Account, Base, Ledger
+from .migrations import NEW_TABLES, migrate_notifications
 
 
 class Database:
@@ -25,7 +26,9 @@ class Database:
                 connection.execute("PRAGMA busy_timeout=1000")
 
     def initialize(self, initial: int, now: int):
-        Base.metadata.create_all(self.engine)
+        new_names = {table.name for table in NEW_TABLES}
+        Base.metadata.create_all(self.engine, tables=[table for table in Base.metadata.sorted_tables if table.name not in new_names])
+        migrate_notifications(self.engine)
         with self.write() as (session, account):
             if account is None:
                 account = Account(id=1, initial=initial, cash=initial, reserved=0, unsettled=0, realized=0, paused=False, reconciliation_required=False, worker_heartbeat_ms=0)

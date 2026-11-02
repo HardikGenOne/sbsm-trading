@@ -46,7 +46,8 @@ function demoData() {
     trades:[{cycle_id:"demo:NTPC:closed",symbol:"NTPC",opened_ms:now-259200000,closed_ms:now-1200000,realized:1246000}],
     ledger:[{id:4,kind:"SELL_FILL",time_ms:now-1200000,cash_delta:2746000,reserve_delta:0,unsettled_delta:2600000,realized_delta:1246000,cash_after:27193000,reserved_after:0},{id:3,kind:"BUY_FILL",time_ms:now-720000,cash_delta:-5900000,reserve_delta:-5900000,unsettled_delta:0,realized_delta:0,cash_after:24447000,reserved_after:0},{id:2,kind:"RESERVE",time_ms:now-780000,cash_delta:0,reserve_delta:6000000,unsettled_delta:0,realized_delta:0,cash_after:30347000,reserved_after:6000000},{id:1,kind:"INITIAL_DEPOSIT",time_ms:now-604800000,cash_delta:50000000,reserve_delta:0,unsettled_delta:0,realized_delta:0,cash_after:50000000,reserved_after:0}],
     summary:{signals:18,skipped:3,active_orders:1,closed_trades:1},
-    readiness:{ready_for_new_entries:false,checks:[{name:"environment",status:"INFO",message:"Illustrative browser sandbox. No real feed or account is connected."},{name:"allocation",status:"PASS",message:"12% of the example fund pool per new entry."},{name:"trade_matching",status:"PASS",message:"Example exits match their entry trade cycle."},{name:"broker_access",status:"WAITING",message:"Broker access is not needed to explore this demo."}],market_open:false}
+    readiness:{ready_for_new_entries:false,checks:[{name:"environment",status:"INFO",message:"Illustrative browser sandbox. No real feed or account is connected."},{name:"allocation",status:"PASS",message:"12% of the example fund pool per new entry."},{name:"trade_matching",status:"PASS",message:"Example exits match their entry trade cycle."},{name:"broker_access",status:"WAITING",message:"Broker access is not needed to explore this demo."}],market_open:false},
+    notifications:{enabled:false,counts:{},items:[]}
   };
 }
 state.data=demoData();
@@ -115,7 +116,12 @@ function ledgerTable() {
 }
 function systemView() {
   const r=state.data.readiness;
-  return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>`;
+  return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>${notificationCard()}`;
+}
+function notificationCard(){
+  const n=state.data.notifications||{enabled:false,counts:{},items:[]};
+  const failed=(n.counts.FAILED||0)+(n.counts.BLOCKED||0),pending=(n.counts.PENDING||0)+(n.counts.SENDING||0);
+  return `<article class="card"><div class="card-heading"><div><h2>Telegram notifications</h2><p class="card-subtitle">${state.source==="demo"?"No messages are sent from the browser sandbox":n.enabled?"Configured private destination · durable delivery queue":"Set up the bot locally with scripts/telegram_setup.py"}</p></div>${n.enabled?`<button class="button secondary" id="telegram-test">Send connection test</button>`:badge("INFO")}</div><div class="engine-summary"><div class="engine-summary-row"><span>Notifications</span><strong>${n.enabled?"Enabled":"Not configured"}</strong></div><div class="engine-summary-row"><span>Pending / sending</span><strong>${pending}</strong></div><div class="engine-summary-row"><span>Sent</span><strong>${n.counts.SENT||0}</strong></div><div class="engine-summary-row"><span>Failed / blocked</span><strong>${failed}</strong></div><p class="engine-hint">${failed?"Review /api/notifications for delivery error categories. Telegram failures do not block paper processing.":"Trade decisions, fills and meaningful system changes generate messages. Bot tokens and chat IDs are never shown here."}</p></div></article>`;
 }
 
 function render() {
@@ -163,10 +169,10 @@ async function refresh() {
   if(state.source==="demo"){state.lastUpdated=Date.now();state.error="";render();return;}
   state.loading=true;$("#refresh-button").disabled=true;
   try {
-    const names=["portfolio","orders","fills","signals","skipped","trades","ledger","readiness","summary"];
-    const results=await Promise.all(names.map(name=>api(`/api/${name}${["portfolio","readiness","summary"].includes(name)?"":`?limit=${state.limit}&order=desc`}`)));
+    const names=["portfolio","orders","fills","signals","skipped","trades","ledger","readiness","summary","notifications"];
+    const results=await Promise.all(names.map(name=>api(`/api/${name}${["portfolio","readiness","summary","notifications"].includes(name)?"":`?limit=${state.limit}&order=desc`}`)));
     if(state.source!=="account")return;
-    const data={};names.forEach((name,index)=>data[name==="trades"?"trades":name]=results[index].items||results[index]);
+    const data={};names.forEach((name,index)=>data[name]=name==="notifications"?results[index]:results[index].items||results[index]);
     state.data=data;state.error="";state.lastUpdated=Date.now();
   } catch(error) {if(state.source==="account")state.error=error.message+" Existing values may be out of date.";}
   finally{state.loading=false;$("#refresh-button").disabled=false;render();}
@@ -182,7 +188,7 @@ async function switchSource(source) {
     // Do not display demo funds under an actual-account banner while loading.
     const previous=state.source;state.source="account";
     if(previous!=="account"){
-      try {const p=await api("/api/portfolio");state.data={portfolio:p,orders:[],fills:[],signals:[],skipped:[],trades:[],ledger:[],summary:{signals:0,skipped:0,active_orders:0,closed_trades:0},readiness:{ready_for_new_entries:false,checks:[]}};}
+      try {const p=await api("/api/portfolio");state.data={portfolio:p,orders:[],fills:[],signals:[],skipped:[],trades:[],ledger:[],notifications:{enabled:false,counts:{},items:[]},summary:{signals:0,skipped:0,active_orders:0,closed_trades:0},readiness:{ready_for_new_entries:false,checks:[]}};}
       catch(error){state.source=previous;showToast(error.message);render();return;}
     }
     await refresh();
@@ -211,6 +217,7 @@ document.addEventListener("click",async event=>{
   if(target.dataset.view){navigate(target.dataset.view);return;}
   if(target.hasAttribute("data-close-dialog")){target.closest("dialog").close();return;}
   if(target.id==="load-more"){state.limit=Math.min(500,state.limit+100);await refresh();return;}
+  if(target.id==="telegram-test"){if(state.source!=="account")return;if(!await ask("Send a Telegram connection test?","A non-financial test message will be sent to the configured notification chat.","Queue test message"))return;try{await api("/controls/notifications/test",{method:"POST"});showToast("Telegram test queued. Check delivery status shortly.");await refresh();}catch(error){showToast(error.message);}return;}
   if(target.dataset.signalDetail){try{const trace=state.source==="demo"?(state.data.signals.find(s=>String(s.id)===target.dataset.signalDetail)||state.data.skipped.find(s=>String(s.id)===target.dataset.signalDetail)):await api(`/api/signals/${Number(target.dataset.signalDetail)}/trace`);$("#detail-content").textContent=JSON.stringify(trace,null,2);$("#detail-dialog").showModal();}catch(error){showToast(error.message);}return;}
   if(target.dataset.cancelOrder){
     const id=Number(target.dataset.cancelOrder);if(!await ask("Cancel remaining entry?","Already filled shares remain in their position. The unspent reservation will be released.","Cancel remainder"))return;

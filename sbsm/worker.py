@@ -2,12 +2,14 @@
 import logging
 import signal
 import threading
+from sqlalchemy import select
 
 from .config import Settings
 from .database import Database
 from .engine import PaperEngine, now_ms
 from .market import KiteQuotes, MarketCalendar
 from .models import Audit
+from .notifications import enqueue
 
 log = logging.getLogger("sbsm.worker")
 
@@ -25,6 +27,9 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     last_error_at = 0
+    with db.read() as session:
+        transition = session.scalar(select(Audit).where(Audit.action.in_(("WORKER_ERROR", "WORKER_RECOVERED"))).order_by(Audit.id.desc()))
+        error_active = bool(transition and transition.action == "WORKER_ERROR")
     log.info("Paper worker started; feed=%s; no live order execution exists", settings.feed_mode)
     try:
         while not stop.is_set():
@@ -37,14 +42,26 @@ def main():
                     for quote in feed.fetch(symbols):
                         engine.quote(quote, "kite")
                 engine.step()
+                if error_active:
+                    with db.write() as (s, _):
+                        audit = Audit(time_ms=now_ms(), action="WORKER_RECOVERED", detail="Processing iteration completed")
+                        s.add(audit)
+                        s.flush()
+                        enqueue(s, settings, f"audit:{audit.id}", "PROCESSING RECOVERED", ["Paper processing resumed. Review readiness before relying on quote delivery."], now_ms())
+                    error_active = False
             except Exception as exc:
                 # Exception bodies may contain broker URLs/credentials. Log class only.
                 if now_ms() - last_error_at > 60000:
                     last_error_at = now_ms()
                     log.error("Worker iteration failed (%s); durable state retained", type(exc).__name__)
+                if not error_active:
                     try:
                         with db.write() as (s, _):
-                            s.add(Audit(time_ms=now_ms(), action="WORKER_ERROR", detail=type(exc).__name__))
+                            audit = Audit(time_ms=now_ms(), action="WORKER_ERROR", detail=type(exc).__name__)
+                            s.add(audit)
+                            s.flush()
+                            enqueue(s, settings, f"audit:{audit.id}", "PROCESSING ERROR", [f"Error category: {type(exc).__name__}", "Durable trading state is retained. Inspect system health."], now_ms())
+                        error_active = True
                     except Exception:
                         log.error("Could not persist worker health event")
             stop.wait(settings.poll_seconds)

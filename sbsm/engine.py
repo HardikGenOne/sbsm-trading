@@ -6,9 +6,11 @@ import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select, func
+from sqlalchemy.orm import object_session
 
 from .models import Account, Audit, Conflict, Event, Fill, Ledger, Order, Position, Quote, Settlement
 from .schemas import QuoteInput, Signal
+from .notifications import enqueue, rupees
 
 ACTIVE = ("PENDING", "PARTIALLY_FILLED")
 
@@ -100,6 +102,10 @@ class PaperEngine:
         event.status = "SKIPPED"
         event.reason = reason
         event.decision = details
+        lines = [f"{event.symbol} · {event.action}", f"Reason: {reason}", f"Signal #{event.id}"]
+        if "required_paise" in details:
+            lines += [f"Required: {rupees(details['required_paise'])}", f"Available: {rupees(details['available_paise'])}"]
+        enqueue(object_session(event), self.settings, f"signal:{event.id}:skipped", "SIGNAL SKIPPED", lines, self.clock())
 
     def cancel(self, s, a, order, now, reason):
         if order.status not in ACTIVE:
@@ -112,6 +118,7 @@ class PaperEngine:
         event = s.get(Event, order.signal_id)
         event.status = "PARTIAL" if order.filled_quantity else order.status
         event.reason = reason
+        enqueue(s, self.settings, f"order:{order.id}:cancelled", "ENTRY " + order.status, [order.symbol, f"Reason: {reason}", f"Already filled: {order.filled_quantity} shares", f"Order #{order.id}"], now)
 
     def exit_intent(self, s, a, event, now):
         # A queued entry whose exit has already arrived must never open a late position.
@@ -139,6 +146,7 @@ class PaperEngine:
         s.add(order)
         event.status = "ACCEPTED"
         event.decision = {"quantity": position.quantity}
+        enqueue(s, self.settings, f"signal:{event.id}:exit", "EXIT QUEUED", [event.symbol, f"Quantity: {position.quantity} shares", "Waiting for an open market and a fresh quote.", f"Signal #{event.id}"], now)
 
     def entry_intent(self, s, a, event, now, market_open):
         pool = a.initial + a.realized
@@ -169,6 +177,7 @@ class PaperEngine:
         self.record(s, a, "RESERVE", now, order.id, reserve=budget)
         event.status = "ACCEPTED"
         event.decision = details
+        enqueue(s, self.settings, f"signal:{event.id}:accepted", "ENTRY ACCEPTED", [event.symbol, f"Budget reserved: {rupees(budget)}", f"Fund pool: {rupees(pool)}", f"Available after reserve: {rupees(available - budget)}", f"Signal #{event.id}"], now)
 
     def fresh_quote(self, s, order, now):
         q = s.scalar(select(Quote).where(Quote.symbol == order.symbol, Quote.source == self.settings.feed_mode).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
@@ -266,6 +275,11 @@ class PaperEngine:
         else:
             order.status = "PARTIALLY_FILLED"
             event.status = "PARTIALLY_FILLED"
+        title = f"{order.side} " + ("FILLED" if order.status == "FILLED" else "PARTIAL FILL")
+        lines = [f"{order.symbol} · {quantity} shares @ {rupees(price)}", f"Modeled charges: {rupees(fees)}", f"Order #{order.id} · {order.filled_quantity}/{order.quantity} filled", f"Quote source: {cfg.feed_mode.upper()}"]
+        if not buy:
+            lines += [f"Net realized on this fill: {rupees(realized)}", f"Fund pool: {rupees(a.initial + a.realized)}", f"Next 12% allocation: {rupees(max(0, (a.initial + a.realized) * cfg.allocation_bps // 10000))}"]
+        enqueue(s, cfg, f"fill:{fill.id}", title, lines, now)
 
     def step(self):
         now = self.clock()

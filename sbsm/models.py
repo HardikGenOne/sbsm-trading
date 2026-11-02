@@ -138,3 +138,26 @@ class Audit(Base):
     time_ms: Mapped[int] = mapped_column(BigInteger)
     action: Mapped[str] = mapped_column(String(64))
     detail: Mapped[str] = mapped_column(Text)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dedupe_key: Mapped[str] = mapped_column(String(160), unique=True)
+    created_ms: Mapped[int] = mapped_column(BigInteger)
+    due_ms: Mapped[int] = mapped_column(BigInteger, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    body: Mapped[str] = mapped_column(Text)
+    bot_id: Mapped[str] = mapped_column(String(40))
+    chat_id: Mapped[str] = mapped_column(String(40))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    lease_until_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    sent_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    telegram_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
+class NotificationState(Base):
+    __tablename__ = "notification_state"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON)

@@ -3,12 +3,14 @@ import hmac
 import json
 from pathlib import Path
 from typing import Literal
+import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import OperationalError
@@ -17,10 +19,11 @@ from .config import Settings
 from .database import Database
 from .engine import PaperEngine, RateLimited, SignalConflict, now_ms
 from .market import MarketCalendar
-from .models import Audit, Conflict, Event, Fill, Ledger, Order, Position
+from .models import Account, Audit, Conflict, Event, Fill, Ledger, Notification, Order, Position
 from .schemas import QuoteInput, Signal
 from .readiness import report as readiness_report
 from .sessions import BrowserSessions, COOKIE
+from .notifications import enqueue
 
 
 def create_app(settings=None, database=None, calendar=None, clock=now_ms):
@@ -35,7 +38,9 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
         if database is None:
             db.engine.dispose()
 
-    app = FastAPI(title="SBSM Paper Trading Brain", version="0.1.0", lifespan=lifespan)
+    production = settings.environment == "production"
+    app = FastAPI(title="SBSM Paper Trading Brain", version="0.1.0", lifespan=lifespan, docs_url=None if production else "/docs", redoc_url=None if production else "/redoc", openapi_url=None if production else "/openapi.json")
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     app.state.engine = engine
     sessions = BrowserSessions(settings.admin_token.get_secret_value(), clock, settings.session_seconds)
     bearer = HTTPBearer(auto_error=False)
@@ -95,10 +100,20 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
     def health():
         return {"service": "sbsm-paper", "mode": "paper"}
 
+    @app.get("/health/ready")
+    def operational_health(response: Response):
+        with db.read() as s:
+            account = s.get(Account, 1)
+            recent = bool(account and 0 <= clock() - account.worker_heartbeat_ms < 30000)
+        response.status_code = 200 if recent else 503
+        return {"service": "sbsm-paper", "worker_recent": recent}
+
     @app.post("/webhooks/tradingview/{token}", status_code=202)
     async def webhook(token: str, request: Request):
         if not hmac.compare_digest(token, settings.webhook_token.get_secret_value()):
             raise HTTPException(401, "Invalid webhook credential")
+        if settings.webhook_allowed_ips and (not request.client or request.client.host not in settings.webhook_allowed_ips):
+            raise HTTPException(403, "Webhook source not allowed")
         body = bytearray()
         async for chunk in request.stream():
             body.extend(chunk)
@@ -161,6 +176,40 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
             cycle_signals = s.scalars(select(Event).where(Event.cycle_id == event.cycle_id).order_by(Event.id)).all()
             position = s.get(Position, event.cycle_id)
             return {"signal": row_dict(event), "cycle_signals": [row_dict(row) for row in cycle_signals], "orders": [row_dict(row) for row in orders], "fills": [row_dict(row) for row in fills], "ledger": [row_dict(row) for row in ledger], "position": row_dict(position) if position else None, "money_unit": "paise"}
+
+    @app.get("/api/notifications", dependencies=[Depends(admin)])
+    def notification_status(limit: int = Query(30, ge=1, le=100)):
+        with db.read() as s:
+            counts = dict(s.execute(select(Notification.status, func.count()).group_by(Notification.status)).all())
+            rows = s.scalars(select(Notification).order_by(Notification.id.desc()).limit(limit)).all()
+            safe = [{key: getattr(row, key) for key in ("id", "dedupe_key", "created_ms", "status", "attempts", "sent_ms", "error_code")} for row in rows]
+        return {"enabled": settings.telegram_enabled, "counts": counts, "items": safe}
+
+    @app.post("/controls/notifications/test", dependencies=[Depends(admin)], status_code=202)
+    def notification_test():
+        if not settings.telegram_enabled:
+            raise HTTPException(409, "Configure and enable Telegram locally first")
+        key = "test:" + str(uuid.uuid4())
+        with db.write() as (s, _):
+            enqueue(s, settings, key, "CONNECTION TEST", ["Notifications are connected to the configured chat.", "No signal or order was created."], clock())
+            s.add(Audit(time_ms=clock(), action="TELEGRAM_TEST_QUEUED", detail=key))
+        return {"status": "QUEUED", "reference": key}
+
+    @app.post("/controls/notifications/{notification_id}/retry", dependencies=[Depends(admin)])
+    def notification_retry(notification_id: int):
+        if not settings.telegram_enabled:
+            raise HTTPException(409, "Telegram is disabled")
+        with db.write() as (s, _):
+            row = s.get(Notification, notification_id)
+            if not row:
+                raise HTTPException(404, "Notification not found")
+            if row.chat_id != settings.telegram_chat_id.get_secret_value() or row.bot_id != settings.telegram_bot_token.get_secret_value().split(":", 1)[0]:
+                raise HTTPException(409, "Original destination differs; historical messages cannot be retargeted")
+            if row.status not in ("FAILED", "BLOCKED"):
+                raise HTTPException(409, "Only failed or blocked messages can be retried")
+            row.status, row.attempts, row.due_ms, row.error_code = "PENDING", 0, clock(), None
+            s.add(Audit(time_ms=clock(), action="TELEGRAM_RETRY", detail=f"Notification {row.id}"))
+        return {"status": "QUEUED"}
 
     @app.get("/api/{collection}", dependencies=[Depends(admin)])
     def rows(collection: str, limit: int = Query(100, ge=1, le=500), after: int = Query(0, ge=0), status: str | None = None, order: Literal["asc", "desc"] = "asc"):
