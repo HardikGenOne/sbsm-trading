@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     settlement_mode: Literal["next_session", "immediate"] = "next_session"
     poll_seconds: float = Field(2, ge=0.1)
     closed_dates: list[str] = []
+    session_seconds: int = Field(3600, ge=60, le=86400)
+    session_cookie_secure: bool = False
 
     @model_validator(mode="after")
     def secrets_are_usable(self):

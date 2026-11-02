@@ -20,6 +20,9 @@ postgres = ["psycopg[binary]>=3.2,<4"]
 [tool.setuptools.packages.find]
 include = ["sbsm*"]
 
+[tool.setuptools.package-data]
+sbsm = ["static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
