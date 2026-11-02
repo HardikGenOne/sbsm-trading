@@ -1,6 +1,6 @@
 # SBSM paper-trading server
 
-This is a local, persistent paper engine. No broker order-placement endpoint or live execution adapter exists. The web dashboard is a later layer; authenticated JSON endpoints and Swagger UI are available now.
+This is a local, persistent paper engine with a browser dashboard. No broker order-placement endpoint or live execution adapter exists. Authenticated JSON endpoints and Swagger UI are also available.
 
 ## Run
 
@@ -15,6 +15,7 @@ python3 -m venv .venv
 
 The first two steps are already completed in this checkout. Bootstrap preserves an existing `.env`; new credentials are random and written with mode 0600 without being printed.
 
+- Dashboard: http://127.0.0.1:8000/
 - API and Swagger: http://127.0.0.1:8000/docs
 - Liveness: http://127.0.0.1:8000/health
 - Run tests: `.venv/bin/python -m pytest`
@@ -24,6 +25,16 @@ The first two steps are already completed in this checkout. Bootstrap preserves 
 - Stop both processes with Ctrl+C.
 
 In Swagger, use **Authorize**, entering `SBSM_ADMIN_TOKEN` from your local `.env` as the Bearer credential. Do not share `.env` or paste credentials into chat. The two secrets have separate purposes: the admin token cannot authenticate a webhook, and the webhook token cannot access portfolio/control endpoints.
+
+## Dashboard without broker access
+
+The dashboard initially opens in **Demo sandbox** with explicitly illustrative values. Demo navigation, stock filters, signal inspection, pause/resume, pending-entry cancellation and exit requests work in browser memory only. Reloading or reselecting the sandbox resets it. Demo actions never call account-control endpoints or modify the persistent paper ledger. Example activity, fills and ledger excerpts are not measured strategy performance or a complete accounting dataset.
+
+Choose **My paper account** or **Connect paper account** and enter the admin token from `.env` to inspect actual server records, even without broker access. The initial empty account shows ₹5,00,000 and no fabricated positions or returns. The dashboard provides overview, positions, orders, execution fills, signals, skipped decisions, closed trades, ledger and readiness views. It polls actual-account reports every five seconds while visible and while no dialog is open. Collection views load the latest 100 records, expandable to 500; use the paginated APIs for older history. Signal inspection retrieves the entire cycle's signals, orders, fills, ledger and position independently of the current table limit.
+
+The admin token is used only to create a signed browser session and is not stored in localStorage or sessionStorage. The session cookie is HttpOnly, SameSite=Strict and expires after one hour by default. Cookie-authenticated control requests require both a same-origin header and a session-bound CSRF token. Existing Bearer API clients and TradingView webhooks continue to work without browser CSRF tokens. Logout clears the browser cookie; signed sessions otherwise expire naturally. Rotating the admin token invalidates existing sessions once the API restarts. Static assets have no external CDN or font dependency, and the dashboard sets a restrictive Content Security Policy.
+
+Local HTTP uses `SBSM_SESSION_COOKIE_SECURE=false`. Set it to true for HTTPS deployment and configure the trusted reverse proxy correctly before remote access. The demo page itself is public and contains no account data; actual account reports and controls remain authenticated. This local single-owner login is not a multi-user identity system or a completed internet deployment.
 
 For separate terminals, run `uvicorn sbsm.api:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log` and `python -m sbsm.worker` using the project's virtual environment. Use one worker for this SQLite deployment. Database locking also protects against accidental overlapping workers, but extra workers add contention and unnecessary feed polling.
 
@@ -86,14 +97,16 @@ The NSE schedule comes from `pandas-market-calendars`, including its curated hol
 
 ## JSON endpoints
 
-All `/api/*`, `/controls/*`, and `/paper/*` endpoints require `Authorization: Bearer ADMIN_TOKEN`.
+All `/api/*`, `/controls/*`, and `/paper/*` endpoints require `Authorization: Bearer ADMIN_TOKEN` or a valid dashboard browser session. Cookie-authenticated mutations additionally require CSRF protection.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/portfolio` | Pool, cash, reserves, unsettled proceeds, P&L and open positions |
+| `GET /api/summary` | Total signals, skipped decisions, active orders and closed trades |
 | `GET /api/status` | Worker heartbeat, market session, configuration and recent audit |
 | `GET /api/readiness` | Passive readiness checklist for live-data paper execution |
 | `GET /api/signals` | Durable receipt sequence, decision and outcome |
+| `GET /api/signals/{sequence}/trace` | Full trade-cycle signals, orders, fills, ledger and position |
 | `GET /api/skipped` | Separate skipped-signal list with allocation details/reasons |
 | `GET /api/orders` | Pending, partial, filled, cancelled and expired orders |
 | `GET /api/fills` | Individual fills with quantity, price and modeled fees |
@@ -107,7 +120,7 @@ All `/api/*`, `/controls/*`, and `/paper/*` endpoints require `Authorization: Be
 | `POST /controls/reconciliation/acknowledge` | `{"note":"...at least 20 characters..."}` after reviewing mismatch |
 | `POST /paper/quotes` | Inject a manual quote only in manual feed mode |
 
-Collection endpoints use `limit` (max 500) and `after` sequence pagination; signals/orders also accept `status`. Closed trades use `offset`. **All monetary values in accounting APIs are integer paise**; divide by 100 to display rupees. Signal reference prices remain rupees, as in Pine. Fresh complete equity is `null` when any position lacks a fresh mark, rather than silently treating missing holdings as zero. Old marks may appear on individual positions with `quote_stale=true`.
+Collection endpoints use `limit` (max 500), `after` sequence pagination and optional `order=desc` (default remains ascending); signals/orders also accept `status`. Closed trades use `offset` and optional `order=desc`. **All monetary values in accounting APIs are integer paise**; divide by 100 to display rupees. Signal reference prices remain rupees, as in Pine. Fresh complete equity is `null` when any position lacks a fresh mark, rather than silently treating missing holdings as zero. Old marks may appear on individual positions with `quote_stale=true`.
 
 ## Code structure
 
@@ -121,6 +134,8 @@ sbsm/
   readiness.py    Passive live-data paper-readiness checklist
   models.py       Persistent accounting and execution entities
   schemas.py      Pine payload and quote validation
+  sessions.py     Signed browser sessions and CSRF tokens
+  static/         Responsive dashboard HTML, CSS and JavaScript
   worker.py       Persistent-queue consumer and quote polling process
 scripts/
   bootstrap.py    Private local configuration
@@ -134,7 +149,7 @@ data/             Private database files (gitignored)
 
 SQLite is intentional for this first local single-account release: no Redis or database service is required to start. The worker queue lives in SQL, never in memory. Writes serialize via `BEGIN IMMEDIATE`; API network calls and quote polling do not hold account locks. SQLAlchemy includes a PostgreSQL row-lock path, but PostgreSQL deployment/migrations have not been integration-tested here. Do not treat it as a verified production migration.
 
-Back up the database with SQLite's online backup API (not a bare copy of the `.db` while WAL writes are active), and separately retain `.env` securely. Do not reset/delete a running paper ledger. The initial schema is created on startup; future schema changes need explicit migrations. No web UI, remote deployment, live broker orders, or automatic trading-performance claims are included in this milestone.
+Back up the database with SQLite's online backup API (not a bare copy of the `.db` while WAL writes are active), and separately retain `.env` securely. Do not reset/delete a running paper ledger. The initial schema is created on startup; future schema changes need explicit migrations. Remote deployment, live broker orders and automatic trading-performance claims are not included in this milestone.
 
 ## Primary references
 

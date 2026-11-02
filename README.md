@@ -1,6 +1,6 @@
 # SBSM equity webhook package
 
-The Python paper-trading engine is now in this folder. See [SERVER.md](SERVER.md) for installation, startup, market-data configuration, API endpoints, and simulation assumptions. This document retains the Pine alert setup and signal contract.
+The Python paper-trading engine and local dashboard are now in this folder. Start with `.venv/bin/python scripts/run_local.py`, then open http://127.0.0.1:8000/ to explore the isolated demo sandbox or sign in to your actual paper account. See [SERVER.md](SERVER.md) for installation, startup, market-data configuration, API endpoints, and simulation assumptions. This document retains the Pine alert setup and signal contract.
 
 ## Files
 

@@ -18,6 +18,8 @@
 
 ## 3. Build the private dashboard
 
+Local dashboard delivered: isolated browser demo, authenticated actual-account views, cookie/CSRF sessions, mobile layout, paper controls, recent-first records and complete cycle traces. Broker credentials and GitHub publishing remain deferred at the user's request. The items below describe the feature scope; remote hosting and deeper operational verification remain future work.
+
 - Portfolio: fund pool, available cash, reservations, unsettled proceeds, realized/unrealized P&L and quote freshness.
 - Positions, orders, fills, closed trades, and a separate skipped-signal list with reasons and sizing details.
 - Signal-to-ledger event trace and system health: feed, authentication, queue lag, heartbeat and reconciliation alerts.
