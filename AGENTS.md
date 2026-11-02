@@ -1,7 +1,7 @@
 # SBSM project instructions
 
 - Work only in this project folder unless the user explicitly requests otherwise.
-- After every meaningful change, run the relevant checks, make a descriptive Git commit, and push it to the configured GitHub remote. The user has explicitly requested this standing workflow.
+- After every meaningful change, run the relevant checks and make a descriptive local Git commit. GitHub authentication/publishing is temporarily deferred at the user's explicit request; do not retry login or push until the user asks to resume. Once resumed, push meaningful commits to the configured remote as originally requested.
 - Keep commits focused: distinguish signal-contract work, execution/accounting changes, tests, and operational documentation when useful.
 - Do not force-push, rewrite existing history, or overwrite unrelated user changes without explicit authorization.
 - Never commit or push .env files, broker credentials, session tokens, databases, logs, caches, or private trading/account data. Keep .env.example free of actual credentials.
