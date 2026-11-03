@@ -18,7 +18,7 @@
 
 ## 3. Build the private dashboard
 
-Local dashboard delivered: isolated browser demo, authenticated actual-account views, cookie/CSRF sessions, mobile layout, paper controls, recent-first records and complete cycle traces. Broker credentials remain deferred. The user resumed GitHub login and source publishing on 4 November 2026; cloud deployment remains paused. The items below describe the feature scope; remote hosting and deeper operational verification remain future work.
+Local dashboard delivered: isolated browser demo, authenticated actual-account views, cookie/CSRF sessions, mobile layout, paper controls, recent-first records and complete cycle traces. Broker credentials remain deferred. The user resumed GitHub login and source publishing on 4 November 2026; free Render/Vercel hosting with Neon SQL is live. See deploy/HOSTED.md for verification and execution-readiness limits.
 
 - Portfolio: fund pool, available cash, reservations, unsettled proceeds, realized/unrealized P&L and quote freshness.
 - Positions, orders, fills, closed trades, and a separate skipped-signal list with reasons and sizing details.
@@ -27,7 +27,7 @@ Local dashboard delivered: isolated browser demo, authenticated actual-account v
 
 ## 4. Deploy for continuous access
 
-Deployment source, supervised processes, HTTPS Compose configuration, production host/source-IP checks, online backup tool and durable Telegram notifications are now prepared. Actual cloud provisioning, DNS, secrets, bot binding and remote verification remain pending the user's hosting and recipient details. No public deployment has been verified.
+Deployment source, supervised processes, HTTPS Compose configuration, production host/source-IP checks, online backup tool and durable Telegram notifications are now prepared. Render and Vercel public deployments, durable Neon SQL, private-account login and origin/CSRF controls are verified. Broker connection, Telegram binding, genuine TradingView ingress and continuous-runtime guarantees remain outstanding.
 
 - Private authenticated dashboard, HTTPS TradingView ingress with origin verification, secret-path redaction and edge limits.
 - Persistent supervised worker, database backups, recovery drill, and useful error alerts without routine noise.

@@ -2,7 +2,7 @@
 
 The Python paper-trading engine and local dashboard are now in this folder. Start with `.venv/bin/python scripts/run_local.py`, then open http://127.0.0.1:8000/ to explore the isolated demo sandbox or sign in to your actual paper account. See [SERVER.md](SERVER.md) for installation, startup, market-data configuration, API endpoints, and simulation assumptions. This document retains the Pine alert setup and signal contract.
 
-Cloud deployment and durable Telegram notifications are prepared; see [CLOUD.md](CLOUD.md) for the hosting requirements, private bot setup, source packaging, persistence and verification limits. Hosting/bot access is still required before actual deployment or message delivery.
+The dashboard is hosted at [sbsm-trading.vercel.app](https://sbsm-trading.vercel.app), backed by Render Free and durable Neon Postgres. See [deploy/HOSTED.md](deploy/HOSTED.md) for verified setup and limits. Broker access and Telegram binding remain pending; free hosting does not guarantee continuous execution.
 
 ## Files
 

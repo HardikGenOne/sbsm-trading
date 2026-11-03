@@ -1,14 +1,12 @@
 # Cloud hosting and Telegram notifications
 
-Status: deployment preparation and notification delivery are implemented. The user selected Render with a **free-only budget**, has a Telegram bot, and explicitly asked to wait before connecting Render. GitHub source publishing resumed on 4 November 2026; Render deployment and account setup remain on hold until the user resumes them. Nothing has been deployed remotely and no real Telegram message has been sent by the development checks. Telegram credentials and the destination still need local configuration.
+Status: the free Render backend and Vercel dashboard are live, using durable Neon Postgres and the existing SQL engine. GitHub publishing is resumed. See [deploy/HOSTED.md](deploy/HOSTED.md) for resources, credentials handling and verification. Telegram binding, broker access and genuine TradingView ingress verification remain pending. No real Telegram message has been sent.
 
-## Free Render feasibility
+## Free hosting limits
 
-The current SQLite-based stack must not be deployed unchanged to a free Render web service. Free services sleep after 15 minutes without inbound traffic and cannot attach persistent disks; local ledger files can disappear on restart or redeploy. An external cron ping does not provide durable storage or a guarantee of continuous processing. Render cron jobs also cannot access a web service's disk. [Render free-service limits](https://render.com/docs/free), [cron limitations](https://render.com/docs/cronjobs)
+Render Free sleeps after 15 minutes without traffic and has no persistent disk. The hosted entry point therefore rejects SQLite and requires TLS Postgres. Neon Free preserves the ledger independently of Render restarts, subject to its compute and storage allowances. A sleeping receiver can miss TradingView's delivery deadline; this deployment is cloud paper testing, with no always-on guarantee or keepalive cron. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
 
-A free-tier experiment would first need a durable external database and a design that safely resumes processing after sleep, including delayed alert handling and notification delivery. That is a separate implementation and validation task; it cannot currently be described as the requested always-on simulation. No free Render blueprint is supplied that risks the existing paper ledger. Vercel is an optional frontend host, not a domain or a replacement for this continuous Python worker. The dashboard can use Render's HTTPS address if that hosting route is later made suitable.
-
-The paid VPS instructions below are retained as an alternative reference only. They are not an approved spending plan. Do not provision paid services, connect Render or schedule deployment work until the user asks to resume.
+The instructions below describe the optional paid VPS/SQLite alternative. They are reference material, not approval to incur costs. The actual Render/Neon deployment does not use a local SQLite volume or Caddy. Its source-IP gate remains fail closed until the Render proxy chain is verified; do not enable arbitrary forwarded-header trust.
 
 ## What runs continuously
 
@@ -24,7 +22,7 @@ An existing Linux VPS with Docker Compose is the most direct target for the supp
 
 Railway is an alternative and can upload a local directory without GitHub. It needs an attached persistent volume, a single replica, sleeping/serverless mode disabled, and an approved billing limit. Its Hobby plan has a **US$5/month minimum** with usage above the included allowance charged additionally; it is not a guaranteed $5 all-inclusive bill. Its volume permissions and proxy/healthcheck hostnames must be configured for this image before deployment. Railway documents root-owned volume mounts; the supplied image intentionally runs as a non-root user, so the chosen Railway setup needs an explicit permission solution rather than assuming the VPS Compose file applies unchanged. [Local source deployment](https://docs.railway.com/cli/up), [volumes and permissions](https://docs.railway.com/volumes), [pricing](https://docs.railway.com/pricing/plans)
 
-Connecting hosting access, selecting a resource budget and confirming the target is still required. Do not create billable services or claim a public URL exists until deployment succeeds. GitHub source publishing has resumed separately from hosting; the VPS source-archive workflow does not need it.
+The active free Render/Vercel setup is documented in deploy/HOSTED.md. A paid alternative requires a separate approved budget. The VPS source-archive workflow does not need GitHub.
 
 ## Prepare the VPS configuration locally
 
@@ -115,4 +113,4 @@ To update, back up first, transfer the new committed source archive while preser
 
 ## Verification limits
 
-The Python test suite covers financial invariants, notification rollback/retry/restart, destination isolation, host/IP checks, production validation, migrations and backup integrity. Local supervisor/HTTP behavior can be checked without a broker. This machine has no Docker daemon, so a real image build, full Compose run, DNS/TLS, remote reboot, phone access, Railway volume permissions and actual Telegram delivery still require the selected hosting/bot accounts. No remote deployment is claimed by packaging source or writing these files.
+Verification: 70 local tests and five accounting integration scenarios passed against Neon Postgres. Render health and Vercel private-account login, secure cookies, portfolio reads and origin/CSRF controls were verified remotely. Docker Compose, paid VPS reboot/restore and actual Telegram delivery remain untested; they are separate from the deployed native Render service.

@@ -138,7 +138,7 @@ function render() {
   $("#source-banner").classList.toggle("account",state.source==="account");
   $("#source-banner div").innerHTML=state.source==="demo"?"<strong>Demo sandbox</strong><span>Illustrative data. Changes here stay in this browser and never touch your paper account.</span>":"<strong>Your paper account</strong><span>Actual server records. Orders are simulated; no live broker execution exists.</span>";
   $("#connect-inline").textContent=state.source==="demo"?"Open my paper account ↗":"View system health ↗";
-  $("#connection-status").textContent=state.source==="demo"?"Illustrative data · browser sandbox":state.error?"Connection interrupted":"Connected to local paper server";
+  $("#connection-status").textContent=state.source==="demo"?"Illustrative data · browser sandbox":state.error?"Connection interrupted":"Connected to paper server";
   $("#connection-dot").className="connection-dot"+(state.source==="account"?(state.error?" bad":" good"):"");
   $("#updated-at").textContent=state.lastUpdated?`Updated ${time(state.lastUpdated)} IST`:"Illustrative snapshot";
   $("#error-banner").hidden=!state.error;$("#error-banner").textContent=state.error;
