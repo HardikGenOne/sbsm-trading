@@ -2,7 +2,7 @@
 
 The Python paper-trading engine and local dashboard are now in this folder. Start with `.venv/bin/python scripts/run_local.py`, then open http://127.0.0.1:8000/ to explore the isolated demo sandbox or sign in to your actual paper account. See [SERVER.md](SERVER.md) for installation, startup, market-data configuration, API endpoints, and simulation assumptions. This document retains the Pine alert setup and signal contract.
 
-The dashboard is hosted at [sbsm-trading.vercel.app](https://sbsm-trading.vercel.app), backed by Render Free and durable Neon Postgres. See [deploy/HOSTED.md](deploy/HOSTED.md) for verified setup and limits. Broker access and Telegram binding remain pending; free hosting does not guarantee continuous execution.
+The dashboard is hosted at [sbsm-trading.vercel.app](https://sbsm-trading.vercel.app), backed by Render Free and durable Neon Postgres. See [deploy/HOSTED.md](deploy/HOSTED.md) for verified setup and limits. Telegram is enabled and its hosted connection test succeeded. Broker access remains pending; free hosting does not guarantee continuous execution.
 
 ## Files
 
@@ -70,3 +70,5 @@ Compare markers candle by candle with the original strategy using the same input
 - [TradingView Pine v5 alerts](https://www.tradingview.com/pine-script-docs/v5/concepts/alerts/)
 - [TradingView Pine v5 strategies](https://www.tradingview.com/pine-script-docs/v5/concepts/strategies/)
 - [TradingView webhook configuration](https://www.tradingview.com/support/solutions/43000529348-how-to-configure-webhook-alerts/)
+
+Start here: [TradingView, website and Telegram tutorial](GETTING_STARTED.md).

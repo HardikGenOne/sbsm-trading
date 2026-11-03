@@ -27,7 +27,7 @@ Local dashboard delivered: isolated browser demo, authenticated actual-account v
 
 ## 4. Deploy for continuous access
 
-Deployment source, supervised processes, HTTPS Compose configuration, production host/source-IP checks, online backup tool and durable Telegram notifications are now prepared. Render and Vercel public deployments, durable Neon SQL, private-account login and origin/CSRF controls are verified. Broker connection, Telegram binding, genuine TradingView ingress and continuous-runtime guarantees remain outstanding.
+Deployment source, supervised processes, HTTPS Compose configuration, production host/source-IP checks, online backup tool and durable Telegram notifications are now prepared. Render and Vercel public deployments, durable Neon SQL, private-account login and origin/CSRF controls are verified. Telegram binding and hosted message delivery are verified. Render sender checks are implemented and spoof-tested. Broker connection, a genuine TradingView delivery and continuous-runtime guarantees remain outstanding.
 
 - Private authenticated dashboard, HTTPS TradingView ingress with origin verification, secret-path redaction and edge limits.
 - Persistent supervised worker, database backups, recovery drill, and useful error alerts without routine noise.

@@ -5,7 +5,7 @@
 Dashboard: https://sbsm-trading.vercel.app. Backend: https://sbsm-paper.onrender.com.
 The cloud paper account starts with ₹5,00,000 and sizes each new entry at 12% of initial capital plus net realized P&L. Unrealized gains do not increase the sizing pool. The dashboard's demo sandbox is separate from your actual account.
 
-Telegram is configured on the hosted server for the user's verified private chat with **@Trading_signal_alerts_bot**. Its token and chat ID are stored in private configuration, never in this guide or Git. Delivery must be checked through the dashboard's System health screen after deployment. Telegram is for notifications; it does not accept trading commands.
+Telegram is configured on the hosted server for the user's verified private chat with **@Trading_signal_alerts_bot**. Its token and chat ID are stored in private configuration, never in this guide or Git. A hosted connection test was confirmed SENT on 4 November 2026, on its first attempt. Check System health for subsequent delivery status. Telegram is for notifications; it does not accept trading commands.
 
 Broker market-data access is still deferred. Signals can be received and recorded, but simulated fills require genuine fresh quotes: the TradingView candle/reference price is never substituted. A BUY notification saying **ENTRY ACCEPTED** means a budget was reserved, not that shares filled. With no quotes, an accepted entry normally expires after 60 seconds and releases its reservation. Unfilled exits remain pending until eligible quotes and an open market are available.
 

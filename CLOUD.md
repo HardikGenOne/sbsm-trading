@@ -1,12 +1,12 @@
 # Cloud hosting and Telegram notifications
 
-Status: the free Render backend and Vercel dashboard are live, using durable Neon Postgres and the existing SQL engine. GitHub publishing is resumed. See [deploy/HOSTED.md](deploy/HOSTED.md) for resources, credentials handling and verification. Telegram binding, broker access and genuine TradingView ingress verification remain pending. No real Telegram message has been sent.
+Status: the free Render backend and Vercel dashboard are live, using durable Neon Postgres and the existing SQL engine. GitHub publishing is resumed. See [deploy/HOSTED.md](deploy/HOSTED.md) for resources, credentials handling and verification. Telegram is configured and a hosted connection test was delivered. Broker access and the first genuine TradingView delivery remain pending. See GETTING_STARTED.md for the user walkthrough.
 
 ## Free hosting limits
 
 Render Free sleeps after 15 minutes without traffic and has no persistent disk. The hosted entry point therefore rejects SQLite and requires TLS Postgres. Neon Free preserves the ledger independently of Render restarts, subject to its compute and storage allowances. A sleeping receiver can miss TradingView's delivery deadline; this deployment is cloud paper testing, with no always-on guarantee or keepalive cron. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
 
-The instructions below describe the optional paid VPS/SQLite alternative. They are reference material, not approval to incur costs. The actual Render/Neon deployment does not use a local SQLite volume or Caddy. Its source-IP gate remains fail closed until the Render proxy chain is verified; do not enable arbitrary forwarded-header trust.
+The instructions below describe the optional paid VPS/SQLite alternative. They are reference material, not approval to incur costs. The actual Render/Neon deployment does not use a local SQLite volume or Caddy. Its source-IP gate uses Render's documented edge-overwritten CF-Connecting-IP header and was tested against a forged-header request; arbitrary forwarded-header trust remains disabled.
 
 ## What runs continuously
 

@@ -2,7 +2,7 @@
 
 This is a local, persistent paper engine with a browser dashboard. No broker order-placement endpoint or live execution adapter exists. Authenticated JSON endpoints and Swagger UI are also available.
 
-The SQL engine is deployed on Render Free with Neon Postgres; the Vercel dashboard proxies authenticated requests to it. See [deploy/HOSTED.md](deploy/HOSTED.md) for actual resources and verification. Broker access and Telegram delivery remain unconfigured. The optional VPS/SQLite instructions are in [CLOUD.md](CLOUD.md).
+The SQL engine is deployed on Render Free with Neon Postgres; the Vercel dashboard proxies authenticated requests to it. See [deploy/HOSTED.md](deploy/HOSTED.md) for actual resources and verification. Telegram is enabled and its hosted test was confirmed sent; broker access remains unconfigured. The optional VPS/SQLite instructions are in [CLOUD.md](CLOUD.md).
 
 ## Run
 
@@ -68,7 +68,7 @@ https://YOUR-HTTPS-HOST/webhooks/tradingview/YOUR-WEBHOOK-TOKEN
 
 Read `SBSM_WEBHOOK_TOKEN` locally from `.env`. The server returns 202 only after committing the event. A duplicate returns the original sequence and `duplicate=true`. A conflicting payload with the same event ID is quarantined and returns 409. A temporary database error returns 503 instead of acknowledging an unsaved event. Schema errors return 422. Ingress accepts at most 16 KB per request and 120 new signals/minute.
 
-The secret URL is a bearer credential, not proof of origin. Before an internet deployment, put the API behind HTTPS, redact webhook paths in reverse-proxy logs, enforce edge rate/request/connection limits, and configure TradingView-origin verification. Keep portfolio/control routes behind authentication. Access logs are disabled in the supplied local launcher to avoid logging the webhook token. The cloud receiver is public, but TradingView origin verification through Render is still pending. Its IP gate stays fail closed; do not cut alerts over until a genuine delivery is verified.
+The secret URL is a bearer credential, not proof of origin. Before an internet deployment, put the API behind HTTPS, redact webhook paths in reverse-proxy logs, enforce edge rate/request/connection limits, and configure TradingView-origin verification. Keep portfolio/control routes behind authentication. Access logs are disabled in the supplied local launcher to avoid logging the webhook token. The cloud receiver verifies the webhook credential and TradingView source IP through Render's documented edge-overwritten CF-Connecting-IP header. A forged-header probe was blocked in production. Confirm the first genuine TradingView delivery independently; it is not implied by a successful proxy test.
 
 Old static examples are contract fixtures, not current trading instructions. Stale entries are durably skipped. Do not blindly replay them against your paper account. Use `scripts/demo.py` for a current, isolated walkthrough.
 
