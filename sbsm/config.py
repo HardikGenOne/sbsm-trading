@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     environment: Literal["local", "production"] = "local"
     allowed_hosts: list[str] = ["127.0.0.1", "localhost", "testserver"]
     webhook_allowed_ips: list[str] = []
+    webhook_client_ip_source: Literal["socket", "render_cloudflare"] = "socket"
     public_base_url: str = ""
     dashboard_base_url: str = ""
     forwarded_allow_ips: str = "127.0.0.1"

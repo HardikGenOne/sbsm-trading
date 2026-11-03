@@ -26,7 +26,7 @@ def call(client, token, method, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--env-file", choices=[".env", ".env.cloud"], default=".env")
+    parser.add_argument("--env-file", choices=[".env", ".env.cloud", ".env.render"], default=".env")
     args = parser.parse_args()
     path = ROOT / args.env_file
     if not path.exists():

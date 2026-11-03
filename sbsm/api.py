@@ -24,6 +24,7 @@ from .schemas import QuoteInput, Signal
 from .readiness import report as readiness_report
 from .sessions import BrowserSessions, COOKIE
 from .notifications import enqueue
+from .ingress import client_ip
 
 
 def create_app(settings=None, database=None, calendar=None, clock=now_ms):
@@ -114,7 +115,7 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
     async def webhook(token: str, request: Request):
         if not hmac.compare_digest(token, settings.webhook_token.get_secret_value()):
             raise HTTPException(401, "Invalid webhook credential")
-        if settings.webhook_allowed_ips and (not request.client or request.client.host not in settings.webhook_allowed_ips):
+        if settings.webhook_allowed_ips and client_ip(request, settings.webhook_client_ip_source) not in settings.webhook_allowed_ips:
             raise HTTPException(403, "Webhook source not allowed")
         body = bytearray()
         async for chunk in request.stream():
@@ -139,6 +140,12 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
     @app.get("/api/portfolio", dependencies=[Depends(admin)])
     def portfolio():
         return engine.portfolio()
+
+    @app.get("/api/ingress", dependencies=[Depends(admin)])
+    def ingress_status(request: Request):
+        address = client_ip(request, settings.webhook_client_ip_source)
+        return {"source": settings.webhook_client_ip_source, "client_ip": address,
+                "tradingview_source_allowed": address in settings.webhook_allowed_ips}
 
     @app.get("/api/status", dependencies=[Depends(admin)])
     def status():

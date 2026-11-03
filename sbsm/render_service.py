@@ -23,8 +23,9 @@ def configure(environment):
     environment["SBSM_PUBLIC_BASE_URL"] = "https://" + hostname
     environment["SBSM_ALLOWED_HOSTS"] = json.dumps([hostname, "127.0.0.1", "localhost"])
     environment.setdefault("SBSM_WEBHOOK_ALLOWED_IPS", json.dumps(TV_IPS))
-    # No wildcard trust for user-controlled forwarded IPs. Webhook ingress stays
-    # fail closed until the hosted proxy chain has been verified with TradingView.
+    environment["SBSM_WEBHOOK_CLIENT_IP_SOURCE"] = "render_cloudflare"
+    # Generic forwarded IP headers remain untrusted. Webhook source verification
+    # uses Render's documented edge-overwritten CF-Connecting-IP header instead.
     environment.setdefault("SBSM_FORWARDED_ALLOW_IPS", "127.0.0.1")
     if url.drivername == "postgresql":
         url = url.set(drivername="postgresql+psycopg")
