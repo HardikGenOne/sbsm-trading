@@ -54,8 +54,10 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
         if not session:
             raise HTTPException(401, "Authentication required", headers={"WWW-Authenticate": "Bearer"})
         if request.method not in ("GET", "HEAD", "OPTIONS"):
-            expected_origin = str(request.base_url).rstrip("/")
-            if request.headers.get("origin") != expected_origin or not hmac.compare_digest(request.headers.get("x-csrf-token", ""), session["csrf_token"]):
+            expected_origins = {settings.public_base_url.rstrip("/")} if production else {str(request.base_url).rstrip("/")}
+            if settings.dashboard_base_url:
+                expected_origins.add(settings.dashboard_base_url.rstrip("/"))
+            if request.headers.get("origin") not in expected_origins or not hmac.compare_digest(request.headers.get("x-csrf-token", ""), session["csrf_token"]):
                 raise HTTPException(403, "Same-origin request and CSRF token required")
 
     @app.middleware("http")

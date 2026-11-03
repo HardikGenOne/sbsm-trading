@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     allowed_hosts: list[str] = ["127.0.0.1", "localhost", "testserver"]
     webhook_allowed_ips: list[str] = []
     public_base_url: str = ""
+    dashboard_base_url: str = ""
     forwarded_allow_ips: str = "127.0.0.1"
     telegram_enabled: bool = False
     telegram_bot_token: SecretStr = SecretStr("")
@@ -74,6 +75,10 @@ class Settings(BaseSettings):
                 raise ValueError("Production allowed_hosts must include 127.0.0.1 for internal health checks")
             if not self.webhook_allowed_ips:
                 raise ValueError("Production requires an explicit TradingView IP allowlist")
+        if self.dashboard_base_url:
+            dashboard = urlparse(self.dashboard_base_url)
+            if dashboard.scheme != "https" or not dashboard.hostname or dashboard.username or dashboard.password or dashboard.query or dashboard.fragment or dashboard.path not in ("", "/"):
+                raise ValueError("dashboard_base_url must be an explicit HTTPS origin")
         for address in self.webhook_allowed_ips:
             try:
                 ipaddress.ip_address(address)

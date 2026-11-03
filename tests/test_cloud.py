@@ -48,3 +48,30 @@ def test_supervisor_starts_notifier_only_when_enabled(system):
     assert len(configured) == 3
     assert configured[-1][-1] == "sbsm.notifier"
     assert "--no-access-log" in configured[0]
+
+
+def test_render_rejects_temporary_storage_and_derives_secure_origin():
+    from sbsm.render_service import configure
+    with pytest.raises(ValueError):
+        configure({"RENDER_EXTERNAL_HOSTNAME": "paper.onrender.com", "SBSM_DATABASE_URL": "sqlite:///paper.db"})
+    with pytest.raises(ValueError):
+        configure({"RENDER_EXTERNAL_HOSTNAME": "paper.onrender.com", "SBSM_DATABASE_URL": "postgresql://user:secret@host/db"})
+    env = configure({"RENDER_EXTERNAL_HOSTNAME": "paper.onrender.com", "SBSM_DATABASE_URL": "postgresql://user:secret@host/db?sslmode=require"})
+    assert env["SBSM_DATABASE_URL"].startswith("postgresql+psycopg://")
+    assert env["SBSM_SESSION_COOKIE_SECURE"] == "true"
+    assert env["SBSM_PUBLIC_BASE_URL"] == "https://paper.onrender.com"
+    assert env["SBSM_FORWARDED_ALLOW_IPS"] != "*"
+
+
+def test_vercel_cookie_mutations_require_exact_origin_and_csrf(system):
+    engine, clock, calendar = system
+    engine.settings.dashboard_base_url = "https://sbsm.vercel.app"
+    engine.settings.public_base_url = "https://paper.onrender.com"
+    engine.settings.environment = "production"
+    with TestClient(create_app(engine.settings, engine.db, calendar, clock)) as client:
+        login = client.post("/auth/session", headers={"Authorization": "Bearer " + "a" * 40})
+        csrf = login.json()["csrf_token"]
+        url = "/controls/entries"
+        assert client.post(url, json={"paused": True}, headers={"Origin": "https://evil.vercel.app", "X-CSRF-Token": csrf}).status_code == 403
+        assert client.post(url, json={"paused": True}, headers={"Origin": "https://sbsm.vercel.app"}).status_code == 403
+        assert client.post(url, json={"paused": True}, headers={"Origin": "https://sbsm.vercel.app", "X-CSRF-Token": csrf}).status_code == 200
