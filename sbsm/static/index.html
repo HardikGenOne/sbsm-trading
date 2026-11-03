@@ -25,7 +25,7 @@
       <button class="nav-item" data-view="ledger"><span class="nav-icon">≡</span>Fund ledger</button>
       <button class="nav-item" data-view="system"><span class="nav-icon">⚙</span>System health</button>
     </nav>
-    <div class="sidebar-bottom"><div class="strategy-card"><span class="strategy-dot"></span><strong>SBSM strategy</strong><p>20 equities <span>·</span> 2H timeframe</p><small>Long only · Hold until exit</small></div><div class="local-note"><span>◈</span> Local development<span class="version">v0.1</span></div></div>
+    <div class="sidebar-bottom"><div class="strategy-card"><span class="strategy-dot"></span><strong>SBSM strategy</strong><p>20 equities <span>·</span> 2H timeframe</p><small>Long only · Hold until exit</small></div><div class="local-note"><span>◈</span> Paper workspace<span class="version">v0.1</span></div></div>
   </aside>
 
   <div class="shell">
@@ -40,7 +40,7 @@
     </main>
   </div>
 
-  <dialog id="login-dialog" class="modal"><form id="login-form"><button type="button" class="modal-close" data-close-dialog aria-label="Close login">×</button><span class="modal-symbol">◈</span><p class="eyebrow">PRIVATE PAPER ACCOUNT</p><h2>Open your workspace</h2><p class="modal-description">Use the admin token in your local <code>.env</code> file. Broker credentials are not needed to view your account.</p><label class="field-label" for="admin-token">Admin token</label><input id="admin-token" type="password" autocomplete="off" spellcheck="false" required placeholder="Paste your local admin token"><p class="form-error" id="login-error" role="alert"></p><button class="button primary full-width" type="submit" id="login-submit">Open paper account <span>→</span></button><p class="privacy-note">A short-lived HttpOnly session keeps the token out of browser storage.</p></form></dialog>
+  <dialog id="login-dialog" class="modal"><form id="login-form"><button type="button" class="modal-close" data-close-dialog aria-label="Close login">×</button><span class="modal-symbol">◈</span><p class="eyebrow">PRIVATE PAPER ACCOUNT</p><h2>Open your workspace</h2><p class="modal-description">Use the admin token configured for this paper account. Broker credentials are not needed to view your account.</p><label class="field-label" for="admin-token">Admin token</label><input id="admin-token" type="password" autocomplete="off" spellcheck="false" required placeholder="Paste your account admin token"><p class="form-error" id="login-error" role="alert"></p><button class="button primary full-width" type="submit" id="login-submit">Open paper account <span>→</span></button><p class="privacy-note">A short-lived HttpOnly session keeps the token out of browser storage.</p></form></dialog>
   <dialog id="confirm-dialog" class="modal compact"><form method="dialog"><p class="eyebrow">PAPER ACCOUNT CONTROL</p><h2 id="confirm-title">Confirm action</h2><p class="modal-description" id="confirm-description"></p><div class="modal-actions"><button class="button secondary" value="cancel">Cancel</button><button class="button primary" id="confirm-submit" value="confirm">Confirm</button></div></form></dialog>
   <dialog id="detail-dialog" class="modal detail-modal"><button class="modal-close" data-close-dialog aria-label="Close details">×</button><p class="eyebrow">SIGNAL TRACE</p><h2>Signal details</h2><pre id="detail-content"></pre></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

@@ -197,7 +197,7 @@ async function switchSource(source) {
 
 $("#login-form").addEventListener("submit",async event=>{
   event.preventDefault();const input=$("#admin-token"),token=input.value;input.value="";$("#login-submit").disabled=true;
-  try {const response=await fetch("/auth/session",{method:"POST",headers:{Authorization:"Bearer "+token},credentials:"same-origin",cache:"no-store"});if(!response.ok)throw new Error("Could not sign in. Check the admin token in your local .env file.");const session=await response.json();state.authenticated=true;state.csrf=session.csrf_token;$("#login-dialog").close();await switchSource("account");}
+  try {const response=await fetch("/auth/session",{method:"POST",headers:{Authorization:"Bearer "+token},credentials:"same-origin",cache:"no-store"});if(!response.ok)throw new Error("Could not sign in. Check the admin token configured for this server.");const session=await response.json();state.authenticated=true;state.csrf=session.csrf_token;$("#login-dialog").close();await switchSource("account");}
   catch(error){$("#login-error").textContent=error.message;}
   finally{$("#login-submit").disabled=false;}
 });
