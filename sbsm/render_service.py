@@ -3,6 +3,7 @@ import json
 import os
 
 from sqlalchemy.engine import make_url
+from dotenv import load_dotenv
 
 from .config import Settings
 from .service import supervise
@@ -33,6 +34,7 @@ def configure(environment):
 
 def main():
     try:
+        load_dotenv("/etc/secrets/sbsm.env", override=False)
         configure(os.environ)
         settings = Settings()
     except Exception:

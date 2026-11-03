@@ -1,0 +1,16 @@
+.env*
+data/
+work/
+.venv/
+.git/
+.pytest_cache/
+**/__pycache__/
+**/*.pyc
+**/*.db*
+**/*.sqlite*
+**/*.log
+**/*.key
+**/*.pem
+tests/
+deploy/
+web-dist/
