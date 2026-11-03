@@ -1,6 +1,6 @@
 # Cloud hosting and Telegram notifications
 
-Status: deployment preparation and notification delivery are implemented. The user selected Render with a **free-only budget**, has a Telegram bot, and explicitly asked to wait before connecting Render or resuming source publishing. Deployment and account setup are on hold until the user resumes. Nothing has been deployed remotely and no real Telegram message has been sent by the development checks. Telegram credentials and the destination still need local configuration.
+Status: deployment preparation and notification delivery are implemented. The user selected Render with a **free-only budget**, has a Telegram bot, and explicitly asked to wait before connecting Render. GitHub source publishing resumed on 4 November 2026; Render deployment and account setup remain on hold until the user resumes them. Nothing has been deployed remotely and no real Telegram message has been sent by the development checks. Telegram credentials and the destination still need local configuration.
 
 ## Free Render feasibility
 
@@ -8,7 +8,7 @@ The current SQLite-based stack must not be deployed unchanged to a free Render w
 
 A free-tier experiment would first need a durable external database and a design that safely resumes processing after sleep, including delayed alert handling and notification delivery. That is a separate implementation and validation task; it cannot currently be described as the requested always-on simulation. No free Render blueprint is supplied that risks the existing paper ledger. Vercel is an optional frontend host, not a domain or a replacement for this continuous Python worker. The dashboard can use Render's HTTPS address if that hosting route is later made suitable.
 
-The paid VPS instructions below are retained as an alternative reference only. They are not an approved spending plan. Do not provision paid services, connect Render, resume GitHub publishing, or schedule deployment work until the user asks to resume.
+The paid VPS instructions below are retained as an alternative reference only. They are not an approved spending plan. Do not provision paid services, connect Render or schedule deployment work until the user asks to resume.
 
 ## What runs continuously
 
@@ -24,7 +24,7 @@ An existing Linux VPS with Docker Compose is the most direct target for the supp
 
 Railway is an alternative and can upload a local directory without GitHub. It needs an attached persistent volume, a single replica, sleeping/serverless mode disabled, and an approved billing limit. Its Hobby plan has a **US$5/month minimum** with usage above the included allowance charged additionally; it is not a guaranteed $5 all-inclusive bill. Its volume permissions and proxy/healthcheck hostnames must be configured for this image before deployment. Railway documents root-owned volume mounts; the supplied image intentionally runs as a non-root user, so the chosen Railway setup needs an explicit permission solution rather than assuming the VPS Compose file applies unchanged. [Local source deployment](https://docs.railway.com/cli/up), [volumes and permissions](https://docs.railway.com/volumes), [pricing](https://docs.railway.com/pricing/plans)
 
-Connecting hosting access, selecting a resource budget and confirming the target is still required. Do not create billable services or claim a public URL exists until deployment succeeds. GitHub authentication remains deferred; the VPS source-archive workflow does not need it.
+Connecting hosting access, selecting a resource budget and confirming the target is still required. Do not create billable services or claim a public URL exists until deployment succeeds. GitHub source publishing has resumed separately from hosting; the VPS source-archive workflow does not need it.
 
 ## Prepare the VPS configuration locally
 

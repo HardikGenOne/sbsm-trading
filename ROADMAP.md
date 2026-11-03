@@ -18,7 +18,7 @@
 
 ## 3. Build the private dashboard
 
-Local dashboard delivered: isolated browser demo, authenticated actual-account views, cookie/CSRF sessions, mobile layout, paper controls, recent-first records and complete cycle traces. Broker credentials and GitHub publishing remain deferred at the user's request. The items below describe the feature scope; remote hosting and deeper operational verification remain future work.
+Local dashboard delivered: isolated browser demo, authenticated actual-account views, cookie/CSRF sessions, mobile layout, paper controls, recent-first records and complete cycle traces. Broker credentials remain deferred. The user resumed GitHub login and source publishing on 4 November 2026; cloud deployment remains paused. The items below describe the feature scope; remote hosting and deeper operational verification remain future work.
 
 - Portfolio: fund pool, available cash, reservations, unsettled proceeds, realized/unrealized P&L and quote freshness.
 - Positions, orders, fills, closed trades, and a separate skipped-signal list with reasons and sizing details.
