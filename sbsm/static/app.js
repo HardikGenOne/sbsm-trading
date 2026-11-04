@@ -196,9 +196,17 @@ async function switchSource(source) {
 }
 
 $("#login-form").addEventListener("submit",async event=>{
-  event.preventDefault();const input=$("#admin-token"),token=input.value;input.value="";$("#login-submit").disabled=true;
-  try {const response=await fetch("/auth/session",{method:"POST",headers:{Authorization:"Bearer "+token},credentials:"same-origin",cache:"no-store"});if(!response.ok)throw new Error("Could not sign in. Check the admin token configured for this server.");const session=await response.json();state.authenticated=true;state.csrf=session.csrf_token;$("#login-dialog").close();await switchSource("account");}
-  catch(error){$("#login-error").textContent=error.message;}
+  event.preventDefault();const input=$("#admin-token"),token=input.value.trim();input.value="";$("#login-submit").disabled=true;
+  try {
+    if(!token)throw new Error("Enter your cloud account admin token.");
+    const response=await fetch("/auth/session",{method:"POST",headers:{Authorization:"Bearer "+token},credentials:"same-origin",cache:"no-store"});
+    if(response.status===401)throw new Error("The admin token was not accepted. Copy only the cloud account token value, without quotes or the variable name.");
+    if(response.status===429)throw new Error("Too many sign-in attempts. Wait a moment and try again.");
+    if(response.status>=500)throw new Error("The paper server is waking up or temporarily unavailable. Wait about a minute and try again.");
+    if(!response.ok)throw new Error(`Sign-in could not complete (HTTP ${response.status}). Please retry.`);
+    const session=await response.json();state.authenticated=true;state.csrf=session.csrf_token;$("#login-dialog").close();await switchSource("account");
+  }
+  catch(error){$("#login-error").textContent=error instanceof TypeError?"Could not reach the paper server. Check your connection and try again shortly.":error.message;}
   finally{$("#login-submit").disabled=false;}
 });
 $("#source-select").addEventListener("change",event=>switchSource(event.target.value));
