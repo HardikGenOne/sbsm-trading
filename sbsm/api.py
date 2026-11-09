@@ -111,8 +111,7 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
         response.status_code = 200 if recent else 503
         return {"service": "sbsm-paper", "worker_recent": recent}
 
-    @app.post("/webhooks/tradingview/{token}", status_code=202)
-    async def webhook(token: str, request: Request):
+    async def tradingview_body(token: str, request: Request):
         if not hmac.compare_digest(token, settings.webhook_token.get_secret_value()):
             raise HTTPException(401, "Invalid webhook credential")
         if settings.webhook_allowed_ips and client_ip(request, settings.webhook_client_ip_source) not in settings.webhook_allowed_ips:
@@ -122,6 +121,11 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
             body.extend(chunk)
             if len(body) > 16384:
                 raise HTTPException(413, "Signal exceeds 16 KB")
+        return body
+
+    @app.post("/webhooks/tradingview/{token}", status_code=202)
+    async def webhook(token: str, request: Request):
+        body = await tradingview_body(token, request)
         try:
             signal = Signal.model_validate(json.loads(body))
         except (ValueError, ValidationError) as exc:
@@ -136,6 +140,37 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
             raise HTTPException(429, str(exc), headers={"Retry-After": "60"}) from exc
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    class TradingViewTest(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        test_id: str = Field(pattern=r"^[A-Za-z0-9_-]{8,48}$")
+
+    def record_tradingview_test(test_id: str):
+        key = "tv-test:" + test_id
+        with db.write() as (s, _):
+            existing = s.scalar(select(Notification).where(Notification.dedupe_key == key))
+            if existing:
+                return {"reference": key, "received_ms": existing.created_ms, "duplicate": True}
+            now = clock()
+            recent = s.scalar(select(func.count()).select_from(Notification).where(
+                Notification.dedupe_key.startswith("tv-test:"), Notification.created_ms >= now - 60000,
+            ))
+            if recent >= 5:
+                raise HTTPException(429, "At most five test alerts per minute", headers={"Retry-After": "60"})
+            enqueue(s, settings, key, "TRADINGVIEW TEST", ["TradingView webhook received.", "No paper order was created."], now)
+        return {"reference": key, "received_ms": now, "duplicate": False}
+
+    @app.post("/webhooks/tradingview/{token}/test", status_code=202)
+    async def tradingview_test(token: str, request: Request):
+        body = await tradingview_body(token, request)
+        try:
+            test = TradingViewTest.model_validate_json(body)
+        except ValidationError as exc:
+            raise HTTPException(422, "Use a unique test_id containing 8–48 letters, digits, underscores or hyphens") from exc
+        if not settings.telegram_enabled:
+            raise HTTPException(409, "Configure and enable Telegram first")
+        from starlette.concurrency import run_in_threadpool
+        return await run_in_threadpool(record_tradingview_test, test.test_id)
 
     @app.get("/api/portfolio", dependencies=[Depends(admin)])
     def portfolio():
@@ -191,8 +226,14 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
         with db.read() as s:
             counts = dict(s.execute(select(Notification.status, func.count()).group_by(Notification.status)).all())
             rows = s.scalars(select(Notification).order_by(Notification.id.desc()).limit(limit)).all()
-            safe = [{key: getattr(row, key) for key in ("id", "dedupe_key", "created_ms", "status", "attempts", "sent_ms", "error_code")} for row in rows]
-        return {"enabled": settings.telegram_enabled, "counts": counts, "items": safe}
+            test_rows = s.scalars(select(Notification).where(Notification.dedupe_key.startswith("tv-test:"))
+                                  .order_by(Notification.id.desc()).limit(10)).all()
+            fields = ("id", "dedupe_key", "created_ms", "status", "attempts", "sent_ms", "error_code")
+        return {
+            "enabled": settings.telegram_enabled, "counts": counts,
+            "items": [{key: getattr(row, key) for key in fields} for row in rows],
+            "test_alerts": [{key: getattr(row, key) for key in fields} for row in test_rows],
+        }
 
     @app.post("/controls/notifications/test", dependencies=[Depends(admin)], status_code=202)
     def notification_test():

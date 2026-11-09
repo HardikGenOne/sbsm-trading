@@ -237,3 +237,33 @@ def test_retry_limit_is_terminal(system):
     assert queued(engine)[0].status == "FAILED"
     clock.advance(1_000_000)
     assert not dispatcher.dispatch_once()
+
+
+def test_tradingview_test_receipt_dedupes_without_touching_trading(system):
+    engine, clock, calendar = system
+    enable(engine)
+    engine.settings.webhook_client_ip_source = "render_cloudflare"
+    engine.settings.webhook_allowed_ips = ["52.89.214.238"]
+    auth = {"Authorization": "Bearer " + "a" * 40}
+    source = {"cf-connecting-ip": "52.89.214.238"}
+    url = "/webhooks/tradingview/" + "b" * 40 + "/test"
+    payload = {"test_id": "sbs-test-001"}
+    with TestClient(create_app(engine.settings, engine.db, calendar, clock)) as client:
+        ledger = client.get("/api/ledger", headers=auth).json()
+        summary = client.get("/api/summary", headers=auth).json()
+        assert client.post(url, json=payload).status_code == 403
+        assert client.post(url.replace("b" * 40, "wrong"), headers=source, json=payload).status_code == 401
+        assert client.post(url, headers=source, json={**payload, "action": "BUY"}).status_code == 422
+        response = client.post(url, headers=source, json=payload)
+        assert response.status_code == 202
+        assert response.json() == {"reference": "tv-test:sbs-test-001", "received_ms": clock(), "duplicate": False}
+        assert client.post(url, headers=source, json=payload).json()["duplicate"] is True
+        for index in range(2, 6):
+            assert client.post(url, headers=source, json={"test_id": f"sbs-test-00{index}"}).status_code == 202
+        assert client.post(url, headers=source, json={"test_id": "sbs-test-006"}).status_code == 429
+        receipts = client.get("/api/notifications", headers=auth).json()["test_alerts"]
+        assert len(receipts) == 5
+        assert receipts[-1]["dedupe_key"] == "tv-test:sbs-test-001"
+        assert receipts[-1]["status"] == "PENDING"
+        assert client.get("/api/ledger", headers=auth).json() == ledger
+        assert client.get("/api/summary", headers=auth).json() == summary
