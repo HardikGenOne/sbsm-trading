@@ -168,3 +168,16 @@ Back up the database with SQLite's online backup API (not a bare copy of the `.d
 - [Kite manual login/session flow](https://kite.trade/docs/connect/v3/user/)
 - [NSE calendar library and update caveats](https://pandas-market-calendars.readthedocs.io/en/latest/)
 - [SQLite immediate transactions](https://www.sqlite.org/lang_transaction.html)
+
+### Dhan Data API
+
+Kite remains the default quote source. To use Dhan for equity paper fills, set
+`SBSM_FEED_MODE=dhan`, `SBSM_DHAN_CLIENT_ID` and `SBSM_DHAN_ACCESS_TOKEN`
+in the private server environment and restart the API and worker together.
+System health shows the active source. Keep the credentials in the server's
+secret configuration and renew the access token when it expires.
+
+Dhan quotes use the NSE equity instrument master and two-sided market depth.
+The reported last-trade time is a conservative freshness proxy. An old trade
+can delay a simulated fill even when a recent depth snapshot is available.
+Verify the connection during market hours before relying on it for fills.

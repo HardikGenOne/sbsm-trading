@@ -7,7 +7,7 @@ from sqlalchemy import select
 from .config import Settings
 from .database import Database
 from .engine import PaperEngine, now_ms
-from .market import KiteQuotes, MarketCalendar
+from .market import MarketCalendar, quote_feed
 from .models import Audit
 from .notifications import enqueue
 
@@ -22,7 +22,7 @@ def main():
     db.initialize(settings.initial_capital_paise, now_ms())
     calendar = MarketCalendar(settings.closed_dates)
     engine = PaperEngine(db, settings, calendar)
-    feed = KiteQuotes(settings)
+    feed = quote_feed(settings)
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -35,12 +35,12 @@ def main():
         while not stop.is_set():
             try:
                 engine.step()
-                if settings.feed_mode == "kite" and calendar.is_open(now_ms()):
+                if feed is not None and calendar.is_open(now_ms()):
                     # A single read-only probe keeps feed readiness observable before
                     # the first signal; never synthesize an entry just to test access.
                     symbols = engine.watch_symbols() or ["ICICIBANK"]
                     for quote in feed.fetch(symbols):
-                        engine.quote(quote, "kite")
+                        engine.quote(quote, settings.feed_mode)
                 engine.step()
                 if error_active:
                     with db.write() as (s, _):
@@ -66,7 +66,8 @@ def main():
                         log.error("Could not persist worker health event")
             stop.wait(settings.poll_seconds)
     finally:
-        feed.close()
+        if feed is not None:
+            feed.close()
         db.engine.dispose()
 
 

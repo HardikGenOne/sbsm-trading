@@ -94,3 +94,13 @@ class KiteQuotes:
 
     def close(self):
         self.client.close()
+
+
+def quote_feed(settings):
+    if settings.feed_mode == "kite":
+        return KiteQuotes(settings)
+    if settings.feed_mode == "dhan":
+        from .dhan import DhanQuotes
+
+        return DhanQuotes(settings)
+    return None

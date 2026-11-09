@@ -6,14 +6,16 @@ import httpx
 
 from sbsm.config import Settings
 from sbsm.engine import now_ms
-from sbsm.market import KiteQuotes
+from sbsm.market import quote_feed
 
 
-def probe_market_data(settings, clock=now_ms, feed_factory=KiteQuotes):
+def probe_market_data(settings, clock=now_ms, feed_factory=quote_feed):
     feed = feed_factory(settings)
+    if feed is None:
+        return {"status": "BLOCKED", "reason": "MANUAL_FEED"}
     try:
         if not feed.configured:
-            return {"status": "BLOCKED", "reason": "MISSING_CREDENTIALS", "next_step": "Run scripts/kite_login.py locally; do not share credentials in chat."}
+            return {"status": "BLOCKED", "reason": "MISSING_CREDENTIALS", "next_step": "Configure credentials for the selected provider locally."}
         quotes = feed.fetch(["ICICIBANK"])
         if not quotes:
             return {"status": "WAITING", "reason": "NO_TWO_SIDED_QUOTE", "next_step": "Check market hours and market-data permissions."}
@@ -36,7 +38,7 @@ def probe_market_data(settings, clock=now_ms, feed_factory=KiteQuotes):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--probe-market-data", action="store_true", help="Make read-only Kite quote requests using local credentials")
+    parser.add_argument("--probe-market-data", action="store_true", help="Make read-only quote requests with the selected provider")
     args = parser.parse_args()
     settings = Settings()
     # Admin credentials are sent only to this fixed local address.

@@ -17,9 +17,11 @@ class Settings(BaseSettings):
     admin_token: SecretStr
     webhook_token: SecretStr
     database_url: str = f"sqlite:///{ROOT / 'data/paper.db'}"
-    feed_mode: Literal["kite", "manual"] = "kite"
+    feed_mode: Literal["kite", "dhan", "manual"] = "kite"
     kite_api_key: SecretStr = SecretStr("")
     kite_access_token: SecretStr = SecretStr("")
+    dhan_client_id: SecretStr = SecretStr("")
+    dhan_access_token: SecretStr = SecretStr("")
     initial_capital_paise: int = Field(50_000_000, gt=0)
     allocation_bps: int = Field(1200, gt=0, le=10000)
     approved_config: str = "lb=3;gap=0.16;noise=25;atr=25;factor=4;wma=30"

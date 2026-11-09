@@ -16,10 +16,11 @@ def report(engine):
     age = now - portfolio["worker_heartbeat_ms"]
     worker_ok = 0 <= age < max(30000, int(settings.poll_seconds * 10000))
     add("worker", "PASS" if worker_ok else "BLOCKED", "Worker heartbeat is recent." if worker_ok else "Start or restart the paper worker.")
-    configured = bool(settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value())
-    if settings.feed_mode != "kite":
-        add("feed", "BLOCKED", "Manual quotes are synthetic; select Kite mode for live-data paper trading.")
-    elif not configured:
+    if settings.feed_mode == "manual":
+        add("feed", "BLOCKED", "Manual quotes are synthetic. Select Kite or Dhan for live-data paper trading.")
+    elif settings.feed_mode == "dhan" and not (settings.dhan_client_id.get_secret_value() and settings.dhan_access_token.get_secret_value()):
+        add("feed", "BLOCKED", "Configure the Dhan client ID and a valid Data API access token on the server.")
+    elif settings.feed_mode == "kite" and not (settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value()):
         add("feed", "BLOCKED", "Configure market-data credentials locally with scripts/kite_login.py, then restart the API and worker.")
     else:
         add("feed", "PASS", "Market-data credentials are configured; freshness below verifies usable quote delivery.")
@@ -46,6 +47,7 @@ def report(engine):
     return {
         "purpose": "live-data paper trading",
         "mode": "paper",
+        "feed_mode": settings.feed_mode,
         "ready_for_new_entries": all(check["status"] == "PASS" for check in checks),
         "checks": checks,
         "pending_signals": pending,
