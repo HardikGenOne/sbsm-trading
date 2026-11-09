@@ -19,6 +19,13 @@ class Account(Base):
     worker_heartbeat_ms: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
+class FeedPreference(Base):
+    __tablename__ = "feed_preference"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    provider: Mapped[str] = mapped_column(String(12))
+    selected_ms: Mapped[int] = mapped_column(BigInteger)
+
+
 class Event(Base):
     __tablename__ = "signals"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -116,8 +116,25 @@ function ledgerTable() {
 }
 function systemView() {
   const r=state.data.readiness;
-  return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Market data", {kite:"Kite",dhan:"Dhan",manual:"Manual"}[r.feed_mode] || "—"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>${notificationCard()}${testAlertsCard()}`;
+  return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Market data", {kite:"Kite",dhan:"Dhan",manual:"Manual"}[r.feed_mode] || "—"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>${marketDataCard(r)}${notificationCard()}${testAlertsCard()}`;
 }
+const marketForm = {provider: "", symbol: "ICICIBANK", result: "", busy: false};
+
+function marketDataCard(readiness) {
+  if (state.source !== "account" || !readiness.providers) return "";
+  const names = {kite: "Kite", dhan: "Dhan", manual: "Manual"};
+  const providers = ["kite", "dhan"];
+  const options = providers.map(provider => `<option value="${provider}" ${(marketForm.provider || readiness.feed_mode) === provider ? "selected" : ""}>${names[provider]}</option>`).join("");
+  const status = providers.map(provider => `<div class="health-row"><strong>${names[provider]}</strong>${badge(readiness.providers[provider] ? "CONFIGURED" : "MISSING CREDENTIALS")}</div>`).join("");
+  return `<article class="card"><div class="card-heading"><div><h2>Market data</h2><p class="card-subtitle">Active paper feed · ${h(names[readiness.feed_mode] || "—")}</p></div></div>
+    <div class="health-list">${status}
+    <div><label for="market-provider">Provider</label> <select id="market-provider">${options}</select>
+    <button class="button secondary" id="market-activate" ${marketForm.busy ? "disabled" : ""}>Set active provider</button></div>
+    <div><label for="market-symbol">SBSM stock</label> <input id="market-symbol" value="${h(marketForm.symbol)}" maxlength="36">
+    <button class="button secondary" id="market-test" ${marketForm.busy ? "disabled" : ""}>Test quote</button></div>
+    <p id="market-result" role="status">${h(marketForm.result || "Test the selected provider for its latest price and market depth.")}</p></div></article>`;
+}
+
 function testAlertsCard() {
   if (state.source !== "account" || !state.data.notifications?.test_alerts) return "";
   const receipts = state.data.notifications.test_alerts;
@@ -226,12 +243,49 @@ $("#pause-button").addEventListener("click",async()=>{
   if(!await ask(paused?"Pause new entries?":"Resume new entries?","Existing accepted orders and position exits stay active.",paused?"Pause entries":"Resume entries"))return;
   try{if(state.source==="demo")state.data.portfolio.entries_paused=paused;else await api("/controls/entries",{method:"POST",body:JSON.stringify({paused})});await refresh();showToast(state.source==="demo"?"Demo control updated. Your paper account is unchanged.":paused?"New entries paused.":"New entries resumed.");}catch(error){showToast(error.message);}
 });
-document.addEventListener("input",event=>{if(event.target.id==="table-search"){state.search=event.target.value;render();}});
+document.addEventListener("change",event=>{if(event.target.id==="market-provider")marketForm.provider=event.target.value;});
+document.addEventListener("input",event=>{if(event.target.id==="market-symbol")marketForm.symbol=event.target.value;if(event.target.id==="table-search"){state.search=event.target.value;render();}});
 document.addEventListener("click",async event=>{
   const target=event.target.closest("button,a");if(!target)return;
   if(target.dataset.view){navigate(target.dataset.view);return;}
   if(target.hasAttribute("data-close-dialog")){target.closest("dialog").close();return;}
   if(target.id==="load-more"){state.limit=Math.min(500,state.limit+100);await refresh();return;}
+  if (target.id === "market-test" || target.id === "market-activate") {
+    if (state.source !== "account") return;
+    const provider = $("#market-provider").value;
+    if (marketForm.busy) return;
+    marketForm.busy = true;
+    target.disabled = true;
+    const showResult = message => {
+      marketForm.result = message;
+      const result = $("#market-result");
+      if (result) result.textContent = message;
+    };
+    try {
+      if (target.id === "market-activate") {
+        if (!await ask("Switch paper market data?", "New simulated fills will use quotes from the selected provider.", "Switch provider")) return;
+        await api("/controls/market-data", {method:"POST", body:JSON.stringify({provider})});
+        await refresh();
+        showToast("Active market data provider updated.");
+      } else {
+        const symbol = $("#market-symbol").value.trim();
+        if (!symbol) { showResult("Enter a stock symbol."); return; }
+        showResult("Requesting quote…");
+        const data = await api(`/api/market-data/quote?${new URLSearchParams({provider,symbol})}`);
+        const q = data.quote;
+        showResult(q ? `${data.provider.toUpperCase()} · ${data.symbol} · LTP ₹${q.last_price} · Bid ₹${q.bid} × ${q.bid_quantity} · Ask ₹${q.ask} × ${q.ask_quantity} · ${date(q.asof_ms)} IST · ${data.fresh ? "Fresh" : "Stale"}` :
+          `${data.provider.toUpperCase()} · ${data.symbol} · No usable two-sided quote. Check market hours and data access.`);
+      }
+    } catch (error) { showResult(error.message); }
+    finally {
+      marketForm.busy = false;
+      for (const id of ["market-test", "market-activate"]) {
+        const button = document.getElementById(id);
+        if (button) button.disabled = false;
+      }
+    }
+    return;
+  }
   if(target.id==="telegram-test"){if(state.source!=="account")return;if(!await ask("Send a Telegram connection test?","A non-financial test message will be sent to the configured notification chat.","Queue test message"))return;try{await api("/controls/notifications/test",{method:"POST"});showToast("Telegram test queued. Check delivery status shortly.");await refresh();}catch(error){showToast(error.message);}return;}
   if(target.dataset.signalDetail){try{const trace=state.source==="demo"?(state.data.signals.find(s=>String(s.id)===target.dataset.signalDetail)||state.data.skipped.find(s=>String(s.id)===target.dataset.signalDetail)):await api(`/api/signals/${Number(target.dataset.signalDetail)}/trace`);$("#detail-content").textContent=JSON.stringify(trace,null,2);$("#detail-dialog").showModal();}catch(error){showToast(error.message);}return;}
   if(target.dataset.cancelOrder){
@@ -245,5 +299,5 @@ document.addEventListener("click",async event=>{
   }
 });
 window.addEventListener("hashchange",()=>{const view=location.hash.slice(1);if(views[view]&&view!==state.view)navigate(view);});
-async function init(){state.view=views[location.hash.slice(1)]?location.hash.slice(1):"overview";render();try{const response=await fetch("/auth/session",{credentials:"same-origin",cache:"no-store"});if(response.ok){const session=await response.json();if(session.authenticated){state.authenticated=true;state.csrf=session.csrf_token;await switchSource("account");}}}catch{}setInterval(()=>{if(state.source==="account"&&!document.hidden&&!document.querySelector("dialog[open]"))refresh();},5000);}
+async function init(){state.view=views[location.hash.slice(1)]?location.hash.slice(1):"overview";render();try{const response=await fetch("/auth/session",{credentials:"same-origin",cache:"no-store"});if(response.ok){const session=await response.json();if(session.authenticated){state.authenticated=true;state.csrf=session.csrf_token;await switchSource("account");}}}catch{}setInterval(()=>{if(state.source==="account"&&!document.hidden&&!document.querySelector("dialog[open]")&&!document.activeElement?.matches("#market-symbol, #market-provider"))refresh();},5000);}
 init();

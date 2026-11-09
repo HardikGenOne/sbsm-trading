@@ -96,10 +96,19 @@ class KiteQuotes:
         self.client.close()
 
 
-def quote_feed(settings):
-    if settings.feed_mode == "kite":
+def feed_configured(settings, provider):
+    if provider == "kite":
+        return bool(settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value())
+    if provider == "dhan":
+        return bool(settings.dhan_client_id.get_secret_value() and settings.dhan_access_token.get_secret_value())
+    return False
+
+
+def quote_feed(settings, provider=None):
+    provider = provider or settings.feed_mode
+    if provider == "kite":
         return KiteQuotes(settings)
-    if settings.feed_mode == "dhan":
+    if provider == "dhan":
         from .dhan import DhanQuotes
 
         return DhanQuotes(settings)

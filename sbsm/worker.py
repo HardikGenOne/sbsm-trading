@@ -22,7 +22,7 @@ def main():
     db.initialize(settings.initial_capital_paise, now_ms())
     calendar = MarketCalendar(settings.closed_dates)
     engine = PaperEngine(db, settings, calendar)
-    feed = quote_feed(settings)
+    provider, feed = None, None
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -35,12 +35,18 @@ def main():
         while not stop.is_set():
             try:
                 engine.step()
+                with db.read() as s:
+                    selection = engine.active_feed(s)
+                if provider != selection[0]:
+                    if feed is not None:
+                        feed.close()
+                    provider, feed = selection[0], quote_feed(settings, selection[0])
                 if feed is not None and calendar.is_open(now_ms()):
                     # A single read-only probe keeps feed readiness observable before
                     # the first signal; never synthesize an entry just to test access.
                     symbols = engine.watch_symbols() or ["ICICIBANK"]
                     for quote in feed.fetch(symbols):
-                        engine.quote(quote, settings.feed_mode)
+                        engine.quote(quote, provider, selection=selection)
                 engine.step()
                 if error_active:
                     with db.write() as (s, _):

@@ -1,6 +1,7 @@
 """Passive operational checks; never changes positions, cash, or broker state."""
 from sqlalchemy import func, select
 
+from .market import feed_configured
 from .models import Event, Quote
 
 
@@ -16,12 +17,16 @@ def report(engine):
     age = now - portfolio["worker_heartbeat_ms"]
     worker_ok = 0 <= age < max(30000, int(settings.poll_seconds * 10000))
     add("worker", "PASS" if worker_ok else "BLOCKED", "Worker heartbeat is recent." if worker_ok else "Start or restart the paper worker.")
-    if settings.feed_mode == "manual":
+    with engine.db.read() as session:
+        provider, selected_ms = engine.active_feed(session)
+        last_quote = session.scalar(select(Quote).where(
+            Quote.source == provider, Quote.observed_ms >= selected_ms,
+        ).order_by(Quote.asof_ms.desc()))
+    providers = {name: feed_configured(settings, name) for name in ("kite", "dhan")}
+    if provider == "manual":
         add("feed", "BLOCKED", "Manual quotes are synthetic. Select Kite or Dhan for live-data paper trading.")
-    elif settings.feed_mode == "dhan" and not (settings.dhan_client_id.get_secret_value() and settings.dhan_access_token.get_secret_value()):
-        add("feed", "BLOCKED", "Configure the Dhan client ID and a valid Data API access token on the server.")
-    elif settings.feed_mode == "kite" and not (settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value()):
-        add("feed", "BLOCKED", "Configure market-data credentials locally with scripts/kite_login.py, then restart the API and worker.")
+    elif not providers[provider]:
+        add("feed", "BLOCKED", f"Configure credentials for {provider.title()} on the server.")
     else:
         add("feed", "PASS", "Market-data credentials are configured; freshness below verifies usable quote delivery.")
 
@@ -35,7 +40,6 @@ def report(engine):
         add("market_session", "BLOCKED", "Market calendar needs review; execution remains blocked.")
 
     with engine.db.read() as session:
-        last_quote = session.scalar(select(Quote).where(Quote.source == settings.feed_mode).order_by(Quote.asof_ms.desc()))
         pending = session.scalar(select(func.count()).select_from(Event).where(Event.status == "QUEUED"))
         oldest = session.scalar(select(func.min(Event.received_ms)).where(Event.status == "QUEUED"))
     fresh = bool(last_quote and 0 <= now - last_quote.asof_ms <= settings.quote_max_age_seconds * 1000)
@@ -47,7 +51,8 @@ def report(engine):
     return {
         "purpose": "live-data paper trading",
         "mode": "paper",
-        "feed_mode": settings.feed_mode,
+        "feed_mode": provider,
+        "providers": providers,
         "ready_for_new_entries": all(check["status"] == "PASS" for check in checks),
         "checks": checks,
         "pending_signals": pending,

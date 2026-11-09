@@ -8,7 +8,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select, func
 from sqlalchemy.orm import object_session
 
-from .models import Account, Audit, Conflict, Event, Fill, Ledger, Order, Position, Quote, Settlement
+from .models import Account, Audit, Conflict, Event, FeedPreference, Fill, Ledger, Order, Position, Quote, Settlement
 from .schemas import QuoteInput, Signal
 from .notifications import enqueue, rupees
 
@@ -51,6 +51,21 @@ class PaperEngine:
     def __init__(self, db, settings, calendar, clock=now_ms):
         self.db, self.settings, self.calendar, self.clock = db, settings, calendar, clock
 
+    def active_feed(self, session):
+        preference = session.get(FeedPreference, 1)
+        if preference:
+            return preference.provider, preference.selected_ms
+        return self.settings.feed_mode, 0
+
+    def select_feed(self, provider):
+        with self.db.write() as (s, _):
+            current, selected_ms = self.active_feed(s)
+            if provider == current:
+                return
+            now = self.clock()
+            s.merge(FeedPreference(id=1, provider=provider, selected_ms=max(now, selected_ms + 1)))
+            s.add(Audit(time_ms=now, action="SELECT_QUOTE_FEED", detail=provider))
+
     def ingest(self, signal: Signal):
         now = self.clock()
         body = serialized(signal)
@@ -88,12 +103,14 @@ class PaperEngine:
             raise RuntimeError("Accounting invariant violated; transaction rolled back")
         s.add(Ledger(kind=kind, time_ms=now, order_id=order_id, cash_delta=cash, reserve_delta=reserve, unsettled_delta=unsettled, realized_delta=realized, cash_after=a.cash, reserved_after=a.reserved, unsettled_after=a.unsettled, realized_after=a.realized))
 
-    def quote(self, value: QuoteInput, source: str):
+    def quote(self, value: QuoteInput, source: str, selection=None):
         now = self.clock()
         if value.asof_ms > now + 2000:
             raise ValueError("Quote timestamp is in the future")
         digest = hashlib.sha256((source + value.model_dump_json()).encode()).hexdigest()
         with self.db.write() as (s, _):
+            if selection is not None and selection != self.active_feed(s):
+                return None
             if not s.get(Quote, digest):
                 s.add(Quote(id=digest, symbol=value.symbol, source=source, asof_ms=value.asof_ms, observed_ms=now, bid=paise(value.bid), ask=paise(value.ask), bid_quantity=value.bid_quantity, ask_quantity=value.ask_quantity, last=paise(value.last_price), tick=max(1, paise(value.tick_size)), bid_used=0, ask_used=0))
         return digest
@@ -179,8 +196,9 @@ class PaperEngine:
         event.decision = details
         enqueue(s, self.settings, f"signal:{event.id}:accepted", "ENTRY ACCEPTED", [event.symbol, f"Budget reserved: {rupees(budget)}", f"Fund pool: {rupees(pool)}", f"Available after reserve: {rupees(available - budget)}", f"Signal #{event.id}"], now)
 
-    def fresh_quote(self, s, order, now):
-        q = s.scalar(select(Quote).where(Quote.symbol == order.symbol, Quote.source == self.settings.feed_mode).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
+    def fresh_quote(self, s, order, now, selection):
+        provider, selected_ms = selection
+        q = s.scalar(select(Quote).where(Quote.symbol == order.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
         if not q or q.id == order.last_quote_id:
             return None
         if not 0 <= now - q.asof_ms <= self.settings.quote_max_age_seconds * 1000:
@@ -189,11 +207,11 @@ class PaperEngine:
             return None
         return q
 
-    def fill_order(self, s, a, order, now):
+    def fill_order(self, s, a, order, now, selection):
         if order.expires_ms is not None and now >= order.expires_ms:
             self.cancel(s, a, order, now, "ENTRY_EXPIRED")
             return
-        q = self.fresh_quote(s, order, now)
+        q = self.fresh_quote(s, order, now, selection)
         if not q:
             return
         cfg = self.settings
@@ -276,7 +294,7 @@ class PaperEngine:
             order.status = "PARTIALLY_FILLED"
             event.status = "PARTIALLY_FILLED"
         title = f"{order.side} " + ("FILLED" if order.status == "FILLED" else "PARTIAL FILL")
-        lines = [f"{order.symbol} · {quantity} shares @ {rupees(price)}", f"Modeled charges: {rupees(fees)}", f"Order #{order.id} · {order.filled_quantity}/{order.quantity} filled", f"Quote source: {cfg.feed_mode.upper()}"]
+        lines = [f"{order.symbol} · {quantity} shares @ {rupees(price)}", f"Modeled charges: {rupees(fees)}", f"Order #{order.id} · {order.filled_quantity}/{order.quantity} filled", f"Quote source: {q.source.upper()}"]
         if not buy:
             lines += [f"Net realized on this fill: {rupees(realized)}", f"Fund pool: {rupees(a.initial + a.realized)}", f"Next 12% allocation: {rupees(max(0, (a.initial + a.realized) * cfg.allocation_bps // 10000))}"]
         enqueue(s, cfg, f"fill:{fill.id}", title, lines, now)
@@ -285,6 +303,7 @@ class PaperEngine:
         now = self.clock()
         market_open = self.calendar.is_open(now)
         with self.db.write() as (s, a):
+            selection = self.active_feed(s)
             a.worker_heartbeat_ms = now
             due = s.scalars(select(Settlement).where(Settlement.released == False, Settlement.available_ms <= now)).all()  # noqa: E712
             for item in due:
@@ -296,14 +315,14 @@ class PaperEngine:
                 s.flush()
             if market_open:
                 for order in s.scalars(select(Order).where(Order.side == "SELL", Order.status.in_(ACTIVE)).order_by(Order.id)).all():
-                    self.fill_order(s, a, order, now)
+                    self.fill_order(s, a, order, now, selection)
                     s.flush()
             for event in s.scalars(select(Event).where(Event.status == "QUEUED", Event.action == "ENTER_LONG").order_by(Event.id)).all():
                 self.entry_intent(s, a, event, now, market_open)
                 s.flush()
             for order in s.scalars(select(Order).where(Order.side == "BUY", Order.status.in_(ACTIVE)).order_by(Order.id)).all():
                 if market_open:
-                    self.fill_order(s, a, order, now)
+                    self.fill_order(s, a, order, now, selection)
                 elif now >= order.expires_ms:
                     self.cancel(s, a, order, now, "ENTRY_EXPIRED")
                 s.flush()
@@ -323,18 +342,19 @@ class PaperEngine:
         now = self.clock()
         with self.db.read() as s:
             a = s.get(Account, 1)
+            provider, selected_ms = self.active_feed(s)
             positions = []
             all_marked = True
             market_value = 0
             for p in s.scalars(select(Position).where(Position.quantity > 0).order_by(Position.symbol)):
-                q = s.scalar(select(Quote).where(Quote.symbol == p.symbol, Quote.source == self.settings.feed_mode).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
+                q = s.scalar(select(Quote).where(Quote.symbol == p.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
                 stale = not q or not 0 <= now - q.asof_ms <= self.settings.quote_max_age_seconds * 1000
                 all_marked = all_marked and not stale
                 value = q.last * p.quantity if q else None
                 if value is not None:
                     market_value += value
                 positions.append({"symbol": p.symbol, "cycle_id": p.cycle_id, "quantity": p.quantity, "cost_paise": p.cost, "market_value_paise": value, "unrealized_paise": None if value is None else value - p.cost, "quote_stale": stale, "quote_asof_ms": q.asof_ms if q else None})
-            return {"mode": "paper", "currency": "INR", "money_unit": "paise", "initial_paise": a.initial, "pool_paise": a.initial + a.realized, "realized_net_paise": a.realized, "cash_paise": a.cash, "reserved_paise": a.reserved, "unsettled_paise": a.unsettled, "available_paise": a.cash - a.reserved - a.unsettled, "next_allocation_paise": max(0, (a.initial + a.realized) * self.settings.allocation_bps // 10000), "equity_paise": a.cash + market_value if all_marked else None, "valuation_complete_and_fresh": all_marked, "entries_paused": a.paused, "reconciliation_required": a.reconciliation_required, "worker_heartbeat_ms": a.worker_heartbeat_ms, "positions": positions}
+            return {"mode": "paper", "feed_mode": provider, "currency": "INR", "money_unit": "paise", "initial_paise": a.initial, "pool_paise": a.initial + a.realized, "realized_net_paise": a.realized, "cash_paise": a.cash, "reserved_paise": a.reserved, "unsettled_paise": a.unsettled, "available_paise": a.cash - a.reserved - a.unsettled, "next_allocation_paise": max(0, (a.initial + a.realized) * self.settings.allocation_bps // 10000), "equity_paise": a.cash + market_value if all_marked else None, "valuation_complete_and_fresh": all_marked, "entries_paused": a.paused, "reconciliation_required": a.reconciliation_required, "worker_heartbeat_ms": a.worker_heartbeat_ms, "positions": positions}
 
     def pause(self, paused: bool):
         with self.db.write() as (s, a):

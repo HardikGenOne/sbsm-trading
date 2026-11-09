@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Literal
 import uuid
 
+import httpx
+
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
@@ -15,10 +17,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import OperationalError
 
-from .config import Settings
+from .config import Settings, SYMBOLS
 from .database import Database
 from .engine import PaperEngine, RateLimited, SignalConflict, now_ms
-from .market import MarketCalendar
+from .market import MarketCalendar, feed_configured, quote_feed
 from .models import Account, Audit, Conflict, Event, Fill, Ledger, Notification, Order, Position
 from .schemas import QuoteInput, Signal
 from .readiness import report as readiness_report
@@ -189,11 +191,51 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
         with db.read() as s:
             latest = s.scalars(select(Audit).order_by(Audit.id.desc()).limit(10)).all()
             audits = [row_dict(row) for row in latest]
-        return {"mode": "paper", "feed_mode": settings.feed_mode, "worker_recent": 0 <= age < max(30000, int(settings.poll_seconds * 10000)), "market_open": engine.calendar.is_open(clock()), "kite_credentials_configured": bool(settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value()), "recent_audit": audits, "entries_paused": account["entries_paused"], "reconciliation_required": account["reconciliation_required"]}
+        return {"mode": "paper", "feed_mode": account["feed_mode"], "worker_recent": 0 <= age < max(30000, int(settings.poll_seconds * 10000)), "market_open": engine.calendar.is_open(clock()), "kite_credentials_configured": bool(settings.kite_api_key.get_secret_value() and settings.kite_access_token.get_secret_value()), "recent_audit": audits, "entries_paused": account["entries_paused"], "reconciliation_required": account["reconciliation_required"]}
 
     @app.get("/api/readiness", dependencies=[Depends(admin)])
     def readiness():
         return readiness_report(engine)
+
+    class FeedSelection(BaseModel):
+        provider: Literal["kite", "dhan"]
+
+    @app.post("/controls/market-data", dependencies=[Depends(admin)])
+    def select_market_data(selection: FeedSelection):
+        if not feed_configured(settings, selection.provider):
+            raise HTTPException(409, "Configure this provider’s credentials on the server first")
+        engine.select_feed(selection.provider)
+        return {"feed_mode": selection.provider}
+
+    @app.get("/api/market-data/quote", dependencies=[Depends(admin)])
+    def test_market_data(provider: Literal["kite", "dhan"], symbol: str = Query(max_length=36)):
+        symbol = symbol.strip().upper().removeprefix("NSE:")
+        if symbol == "BAJAJ-AUTO":
+            symbol = "BAJAJ_AUTO"
+        if symbol not in SYMBOLS:
+            raise HTTPException(422, "Enter an NSE stock from the SBSM watchlist")
+        if not feed_configured(settings, provider):
+            raise HTTPException(409, "This provider’s credentials are missing")
+        feed = quote_feed(settings, provider)
+        try:
+            quotes = feed.fetch([symbol])
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            if code in (401, 403):
+                raise HTTPException(502, "Broker rejected the credentials or market-data permissions") from None
+            if code == 429:
+                raise HTTPException(429, "Broker rate limit reached. Retry in a few seconds.") from None
+            raise HTTPException(502, "Broker quote request failed") from None
+        except (httpx.HTTPError, ArithmeticError, KeyError, TypeError, ValueError):
+            raise HTTPException(502, "Broker did not return usable market data") from None
+        finally:
+            feed.close()
+        if not quotes:
+            return {"provider": provider, "symbol": symbol, "quote": None}
+        quote = quotes[0]
+        age_ms = clock() - quote.asof_ms
+        return {"provider": provider, "symbol": symbol, "quote": quote.model_dump(mode="json"),
+                "age_ms": age_ms, "fresh": 0 <= age_ms <= settings.quote_max_age_seconds * 1000}
 
     @app.get("/api/trades", dependencies=[Depends(admin)])
     def closed_trades(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), order: Literal["asc", "desc"] = "asc"):
@@ -315,10 +357,11 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
 
     @app.post("/paper/quotes", dependencies=[Depends(admin)])
     def quote(value: QuoteInput):
-        if settings.feed_mode != "manual":
-            raise HTTPException(403, "Manual quote injection is disabled in Kite feed mode")
         try:
-            return {"quote_id": engine.quote(value, "manual")}
+            quote_id = engine.quote(value, "manual", selection=("manual", 0))
+            if quote_id is None:
+                raise HTTPException(403, "Manual quote injection requires the manual feed")
+            return {"quote_id": quote_id}
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
