@@ -6,15 +6,15 @@ strategy("SBSM Equities 2H | Webhook v1.0.0", overlay=true, initial_capital=5000
 string STRATEGY_ID = "SBSM"
 string VERSION = "1.0.0"
 
-// 2. Original SBSM parameters.
+// 2. Approved SBSM defaults.
 string STRATEGY_GROUP = "SBSM settings"
-int lookback = input.int(4, "Breakout lookback", minval=1, group=STRATEGY_GROUP)
+int lookback = input.int(3, "Breakout lookback", minval=1, group=STRATEGY_GROUP)
 float gapLimit = input.float(0.16, "Maximum gap above previous high (%)", minval=0.0, step=0.01, group=STRATEGY_GROUP)
-int noiseBars = input.int(15, "Signal cooldown (bars, includes exits)", minval=0, group=STRATEGY_GROUP)
+int noiseBars = input.int(25, "Signal cooldown (bars, includes exits)", minval=0, group=STRATEGY_GROUP)
 string INDICATOR_GROUP = "Indicator settings"
-int stPeriod = input.int(15, "Supertrend ATR period", minval=1, group=INDICATOR_GROUP)
-float stFactor = input.float(1.8, "Supertrend factor", minval=0.01, step=0.1, group=INDICATOR_GROUP)
-int maPeriod = input.int(20, "WMA period", minval=1, group=INDICATOR_GROUP)
+int stPeriod = input.int(25, "Supertrend ATR period", minval=1, group=INDICATOR_GROUP)
+float stFactor = input.float(4.0, "Supertrend factor", minval=0.01, step=0.1, group=INDICATOR_GROUP)
+int maPeriod = input.int(30, "WMA period", minval=1, group=INDICATOR_GROUP)
 
 // 3. Deployment eligibility. Show diagnostics instead of aborting on bar zero.
 // Backtesting works on standard charts, including indices. Webhooks have stricter rules.

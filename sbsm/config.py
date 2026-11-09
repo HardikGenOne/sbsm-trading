@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     kite_access_token: SecretStr = SecretStr("")
     initial_capital_paise: int = Field(50_000_000, gt=0)
     allocation_bps: int = Field(1200, gt=0, le=10000)
-    approved_config: str = "lb=4;gap=0.16;noise=15;atr=15;factor=1.8;wma=20"
+    approved_config: str = "lb=3;gap=0.16;noise=25;atr=25;factor=4;wma=30"
     entry_ttl_seconds: int = Field(60, ge=1, le=3600)
     signal_max_age_seconds: int = Field(120, ge=1)
     execution_latency_ms: int = Field(500, ge=0)
