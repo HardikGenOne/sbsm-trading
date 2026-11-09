@@ -128,7 +128,7 @@ plotshape(sellSignal, title="Exit signal", text="EXIT", style=shape.labeldown, l
 
 // The status describes script eligibility, not broker health or webhook delivery.
 var table statusPanel = table.new(position.top_right, 2, 7, border_width=1)
-if barstate.islast
+if barstate.islastconfirmedhistory or barstate.islast
     color statusColor = chartEligible ? color.new(color.green, 20) : color.new(color.red, 20)
     table.cell(statusPanel, 0, 0, "Webhook eligibility", bgcolor=statusColor, text_color=color.white)
     table.cell(statusPanel, 1, 0, chartStatus, bgcolor=statusColor, text_color=color.white)
