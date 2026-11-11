@@ -5,7 +5,7 @@ import re
 from sqlalchemy import text
 
 from .database import Database
-from .engine import now_ms
+from .models import WebhookReceipt
 
 
 def provision(settings, password):
@@ -13,7 +13,7 @@ def provision(settings, password):
         raise ValueError("Invalid private receiver password configuration")
     db = Database(settings.database_url)
     try:
-        db.initialize(settings.initial_capital_paise, now_ms())
+        WebhookReceipt.__table__.create(db.engine, checkfirst=True)
         with db.engine.begin() as connection:
             role = connection.execute(text("SELECT rolcreaterole, rolcreatedb, rolsuper FROM pg_roles WHERE rolname='sbsm_webhook_ingress'")).first()
             if role is None:
