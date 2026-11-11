@@ -75,3 +75,18 @@ def test_vercel_cookie_mutations_require_exact_origin_and_csrf(system):
         assert client.post(url, json={"paused": True}, headers={"Origin": "https://evil.vercel.app", "X-CSRF-Token": csrf}).status_code == 403
         assert client.post(url, json={"paused": True}, headers={"Origin": "https://sbsm.vercel.app"}).status_code == 403
         assert client.post(url, json={"paused": True}, headers={"Origin": "https://sbsm.vercel.app", "X-CSRF-Token": csrf}).status_code == 200
+
+
+def test_head_health_checks_readiness_without_response_body(system):
+    from fastapi.testclient import TestClient
+    from sbsm.api import create_app
+
+    engine, clock, calendar = system
+    with TestClient(create_app(engine.settings, engine.db, calendar, clock)) as client:
+        assert client.head("/health/ready").status_code == 503
+        engine.step()
+        result = client.head("/health/ready")
+        assert result.status_code == 200
+        assert result.content == b""
+        clock.advance(31000)
+        assert client.head("/health/ready").status_code == 503

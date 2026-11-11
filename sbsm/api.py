@@ -105,7 +105,7 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
     def health():
         return {"service": "sbsm-paper", "mode": "paper"}
 
-    @app.get("/health/ready")
+    @app.api_route("/health/ready", methods=["GET", "HEAD"])
     def operational_health(response: Response):
         with db.read() as s:
             account = s.get(Account, 1)
