@@ -12,15 +12,15 @@ Local verification: 70 tests, plus five opt-in accounting integration cases agai
 
 ## Limitations and cutover
 
-Render Free can sleep, restart, or exhaust shared workspace allowances. Neon Free also has storage and compute allowances. cron-job.org runs GET /health/ready every minute on weekdays in the 11:05–11:16, 13:05–13:16, 15:05–15:16 and 15:20–15:29 IST windows. Response history is enabled. There is no always-on guarantee. A sleeping service can miss TradingView's short delivery deadline. This is a cloud paper-testing setup; check readiness before enabling actual alerts. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
+Render Free can sleep, restart, or exhaust shared workspace allowances. Neon Free also has storage and compute allowances. cron-job.org runs GET https://sbsm-trading.vercel.app/ping every minute on weekdays in the 11:05–11:16, 13:05–13:16, 15:05–15:16 and 15:20–15:29 IST windows. Response history is enabled. There is no always-on guarantee. A sleeping service can miss TradingView's short delivery deadline. This is a cloud paper-testing setup; check readiness before enabling actual alerts. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
 
-Broker access remains deferred. No candle-price fills or live broker orders are enabled. Telegram is enabled for the verified private chat; a connection test was delivered by the hosted outbox on 4 November 2026 (SENT, first attempt). Render-specific source verification uses its documented edge-overwritten CF-Connecting-IP header. A live forged-header probe was blocked at the edge; normal requests resolve through the configured mode. The first genuine TradingView delivery remains unverified. Generic forwarded IP headers remain untrusted.
+Broker access remains deferred. No candle-price fills or live broker orders are enabled. Telegram is enabled for the verified private chat; a connection test was delivered by the hosted outbox on 4 November 2026 (SENT, first attempt). Render-specific source verification uses its documented edge-overwritten CF-Connecting-IP header. A live forged-header probe was blocked at the edge; normal requests resolve through the configured mode. A genuine TradingView price alert verified Vercel receipt, worker processing and first-attempt Telegram delivery on 11 November 2026. This test did not create paper trades. Generic forwarded IP headers remain untrusted.
 
 The cloud begins with a separate ₹500,000 paper ledger. The laptop ledger is not silently merged. Never direct the same intended portfolio's alerts to both ledgers. Use GETTING_STARTED.md to configure a first TradingView alert for receipt verification. Simulated fills still require broker quote readiness; do not treat successful receipt as execution readiness. A deliberate cutover remains necessary.
 
 Render auto-deployment is off. Commit and push meaningful changes, then deploy a tested commit deliberately. Monitor `/health/ready` for operational health and the authenticated dashboard for broker/quote readiness. Access and authentication should be verified through the final Vercel address before relying on remote controls.
 
-User walkthrough: [GETTING_STARTED.md](../GETTING_STARTED.md). The complete private webhook URL is generated locally in ignored `work/tradingview-webhook-url.txt`; its contents must never be committed.
+User walkthrough: [GETTING_STARTED.md](../GETTING_STARTED.md). The new private receiver URL is stored locally in ignored `work/durable-tradingview-webhook-url.txt`. The older `work/tradingview-webhook-url.txt` still identifies the legacy Render route during migration. Receiver secrets are in ignored `.env.receiver` and Vercel production environment variables. The restricted receiver role cannot read or modify the fund ledger. These private files must never be committed.
 
 
 The HEAD warm-up test verified an already warm server only. Subsequent scheduled
@@ -30,3 +30,9 @@ reachability and database/worker readiness. The next cold start and TradingView
 delivery still require verification against the three-second webhook deadline.
 Check scheduled history before the next signal window. Free hosting remains a
 best-effort paper environment.
+
+## Durable receiver verification
+
+The Vercel `/receive/<private-token>` function inserts into Neon before returning 202. Render drains saved receipts in order through the existing idempotent engine. `/ping` checks the inbox database and wakes Render asynchronously, without waiting for Render to start. A cron-job.org test returned 200 in 433 ms. Scheduled windows above cover normal weekday sessions; special sessions require separate warm-up scheduling. Neither warm-ups nor the free receiver provide an absolute delivery guarantee.
+
+A saved test receipt was processed after the worker was deployed, proving recovery of an already persisted receipt. A separate genuine TradingView test then reported successful webhook delivery, with a matching processed receipt and Telegram SENT record. Stock alert URL migration is a separate operational step; do not assume all existing alerts use the new destination until each has been checked.
