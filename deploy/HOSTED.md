@@ -12,7 +12,7 @@ Local verification: 70 tests, plus five opt-in accounting integration cases agai
 
 ## Limitations and cutover
 
-Render Free can sleep, restart, or exhaust shared workspace allowances. Neon Free also has storage and compute allowances. No always-on guarantee or keepalive cron is configured. A sleeping service can miss TradingView's short delivery deadline. This is a cloud paper-testing setup; check readiness before enabling actual alerts. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
+Render Free can sleep, restart, or exhaust shared workspace allowances. Neon Free also has storage and compute allowances. cron-job.org runs GET /health/ready every minute on weekdays in the 11:05–11:16, 13:05–13:16, 15:05–15:16 and 15:20–15:29 IST windows. Response history is enabled. There is no always-on guarantee. A sleeping service can miss TradingView's short delivery deadline. This is a cloud paper-testing setup; check readiness before enabling actual alerts. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
 
 Broker access remains deferred. No candle-price fills or live broker orders are enabled. Telegram is enabled for the verified private chat; a connection test was delivered by the hosted outbox on 4 November 2026 (SENT, first attempt). Render-specific source verification uses its documented edge-overwritten CF-Connecting-IP header. A live forged-header probe was blocked at the edge; normal requests resolve through the configured mode. The first genuine TradingView delivery remains unverified. Generic forwarded IP headers remain untrusted.
 
@@ -21,3 +21,12 @@ The cloud begins with a separate ₹500,000 paper ledger. The laptop ledger is n
 Render auto-deployment is off. Commit and push meaningful changes, then deploy a tested commit deliberately. Monitor `/health/ready` for operational health and the authenticated dashboard for broker/quote readiness. Access and authentication should be verified through the final Vercel address before relying on remote controls.
 
 User walkthrough: [GETTING_STARTED.md](../GETTING_STARTED.md). The complete private webhook URL is generated locally in ignored `work/tradingview-webhook-url.txt`; its contents must never be committed.
+
+
+The HEAD warm-up test verified an already warm server only. Subsequent scheduled
+HEAD checks returned 502 while the service was unavailable. Repeated GET requests
+replace the two isolated attempts per candle. A warm GET test verifies current
+reachability and database/worker readiness. The next cold start and TradingView
+delivery still require verification against the three-second webhook deadline.
+Check scheduled history before the next signal window. Free hosting remains a
+best-effort paper environment.
