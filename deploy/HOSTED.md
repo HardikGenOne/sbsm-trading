@@ -20,7 +20,7 @@ The cloud begins with a separate ₹500,000 paper ledger. The laptop ledger is n
 
 Render auto-deployment is off. Commit and push meaningful changes, then deploy a tested commit deliberately. Monitor `/health/ready` for operational health and the authenticated dashboard for broker/quote readiness. Access and authentication should be verified through the final Vercel address before relying on remote controls.
 
-User walkthrough: [GETTING_STARTED.md](../GETTING_STARTED.md). The new private receiver URL is stored locally in ignored `work/durable-tradingview-webhook-url.txt`. The older `work/tradingview-webhook-url.txt` still identifies the legacy Render route during migration. Receiver secrets are in ignored `.env.receiver` and Vercel production environment variables. The restricted receiver role cannot read or modify the fund ledger. These private files must never be committed.
+User walkthrough: [GETTING_STARTED.md](../GETTING_STARTED.md). The new private receiver URL is stored locally in ignored `work/durable-tradingview-webhook-url.txt`. The standard `work/tradingview-webhook-url.txt` now contains the same new receiver URL; the old Render URL is retained privately in `work/legacy-render-webhook-url.txt`. Receiver secrets are in ignored `.env.receiver` and Vercel production environment variables. The restricted receiver role cannot read or modify the fund ledger. These private files must never be committed.
 
 
 The HEAD warm-up test verified an already warm server only. Subsequent scheduled
@@ -36,3 +36,5 @@ best-effort paper environment.
 The Vercel `/receive/<private-token>` function inserts into Neon before returning 202. Render drains saved receipts in order through the existing idempotent engine. `/ping` checks the inbox database and wakes Render asynchronously, without waiting for Render to start. A cron-job.org test returned 200 in 433 ms. Scheduled windows above cover normal weekday sessions; special sessions require separate warm-up scheduling. Neither warm-ups nor the free receiver provide an absolute delivery guarantee.
 
 A saved test receipt was processed after the worker was deployed, proving recovery of an already persisted receipt. A separate genuine TradingView test then reported successful webhook delivery, with a matching processed receipt and Telegram SENT record. Stock alert URL migration is a separate operational step; do not assume all existing alerts use the new destination until each has been checked.
+
+All 20 existing stock alert destinations were saved to the new receiver. The older duplicate POLYCAB alert was stopped and the missing BSE alert created with the agreed 2H inputs (3, 0.16, 25, 25, 4, 30) and alert() calls only. All 20 intended symbols were observed active. The one-shot delivery test remains stopped, preserving its successful delivery log.
