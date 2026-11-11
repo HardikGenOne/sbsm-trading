@@ -6,6 +6,10 @@
   "outputDirectory": "web-dist",
   "rewrites": [
     {
+      "source": "/ping",
+      "destination": "/api/receive?kind=ping"
+    },
+    {
       "source": "/receive/:token/test",
       "destination": "/api/receive?token=:token&kind=test"
     },

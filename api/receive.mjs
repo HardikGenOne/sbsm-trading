@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+import { waitUntil } from "@vercel/functions";
 
 const tradingViewIPs = new Set(["52.89.214.238", "34.212.75.30", "54.218.53.128", "52.32.178.7"]);
 
@@ -58,10 +59,28 @@ export async function receive(request, sql, expectedToken) {
   }
 }
 
+function wakeWorker() {
+  waitUntil(fetch("https://sbsm-paper.onrender.com/health/ready", {
+    signal: AbortSignal.timeout(30000),
+  }).then(response => response.body?.cancel()).catch(() => {}));
+}
+
 export default {
   async fetch(request) {
     const databaseURL = process.env.SBSM_RECEIVER_DATABASE_URL;
     if (!databaseURL) return Response.json({error: "Receiver not configured"}, {status: 503});
-    return receive(request, neon(databaseURL, {fetchOptions: {signal: AbortSignal.timeout(2000)}}), process.env.SBSM_RECEIVER_TOKEN);
+    const sql = neon(databaseURL, {fetchOptions: {signal: AbortSignal.timeout(2000)}});
+    if (request.method === "GET" && new URL(request.url).searchParams.get("kind") === "ping") {
+      wakeWorker();
+      try {
+        await sql`SELECT 1`;
+        return Response.json({service: "sbsm-receiver", inbox_available: true});
+      } catch {
+        return Response.json({service: "sbsm-receiver", inbox_available: false}, {status: 503});
+      }
+    }
+    const response = await receive(request, sql, process.env.SBSM_RECEIVER_TOKEN);
+    if (response.status === 202) wakeWorker();
+    return response;
   },
 };
