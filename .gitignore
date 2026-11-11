@@ -25,3 +25,5 @@ web-dist/
 .vercel/
 *.pyc
 .DS_Store
+
+node_modules/

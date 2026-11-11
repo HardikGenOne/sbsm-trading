@@ -21,7 +21,7 @@ from .config import Settings, SYMBOLS
 from .database import Database
 from .engine import PaperEngine, RateLimited, SignalConflict, now_ms
 from .market import MarketCalendar, feed_configured, quote_feed
-from .models import Account, Audit, Conflict, Event, Fill, Ledger, Notification, Order, Position
+from .models import Account, Audit, Conflict, Event, Fill, Ledger, Notification, Order, Position, WebhookReceipt
 from .schemas import QuoteInput, Signal
 from .readiness import report as readiness_report
 from .sessions import BrowserSessions, COOKIE
@@ -305,7 +305,7 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
 
     @app.get("/api/{collection}", dependencies=[Depends(admin)])
     def rows(collection: str, limit: int = Query(100, ge=1, le=500), after: int = Query(0, ge=0), status: str | None = None, order: Literal["asc", "desc"] = "asc"):
-        models = {"signals": Event, "skipped": Event, "orders": Order, "fills": Fill, "ledger": Ledger, "audit": Audit, "conflicts": Conflict}
+        models = {"signals": Event, "skipped": Event, "orders": Order, "fills": Fill, "ledger": Ledger, "audit": Audit, "conflicts": Conflict, "receipts": WebhookReceipt}
         model = models.get(collection)
         if model is None:
             raise HTTPException(404, "Unknown collection")

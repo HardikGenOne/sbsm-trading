@@ -10,6 +10,7 @@ from .engine import PaperEngine, now_ms
 from .market import MarketCalendar, quote_feed
 from .models import Audit
 from .notifications import enqueue
+from .receiver import drain_inbox
 
 log = logging.getLogger("sbsm.worker")
 
@@ -34,6 +35,7 @@ def main():
     try:
         while not stop.is_set():
             try:
+                drain_inbox(engine)
                 engine.step()
                 with db.read() as s:
                     selection = engine.active_feed(s)

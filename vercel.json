@@ -2,21 +2,62 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "node scripts/build_dashboard.mjs",
-  "installCommand": "node -e \"console.log('Static dashboard: no dependencies')\"",
+  "installCommand": "npm ci --ignore-scripts",
   "outputDirectory": "web-dist",
   "rewrites": [
-    {"source": "/api/:path*", "destination": "https://sbsm-paper.onrender.com/api/:path*"},
-    {"source": "/auth/:path*", "destination": "https://sbsm-paper.onrender.com/auth/:path*"},
-    {"source": "/controls/:path*", "destination": "https://sbsm-paper.onrender.com/controls/:path*"}
+    {
+      "source": "/receive/:token/test",
+      "destination": "/api/receive?token=:token&kind=test"
+    },
+    {
+      "source": "/receive/:token",
+      "destination": "/api/receive?token=:token"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://sbsm-paper.onrender.com/api/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://sbsm-paper.onrender.com/auth/:path*"
+    },
+    {
+      "source": "/controls/:path*",
+      "destination": "https://sbsm-paper.onrender.com/controls/:path*"
+    }
   ],
   "headers": [
-    {"source": "/(.*)", "headers": [
-      {"key": "Cache-Control", "value": "no-store"},
-      {"key": "X-Content-Type-Options", "value": "nosniff"},
-      {"key": "X-Frame-Options", "value": "DENY"},
-      {"key": "Referrer-Policy", "value": "no-referrer"},
-      {"key": "X-Robots-Tag", "value": "noindex, nofollow"},
-      {"key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"}
-    ]}
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+        }
+      ]
+    }
+  ],
+  "regions": [
+    "sin1"
   ]
 }

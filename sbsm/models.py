@@ -168,3 +168,14 @@ class NotificationState(Base):
     __tablename__ = "notification_state"
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[dict] = mapped_column(JSON)
+
+
+class WebhookReceipt(Base):
+    __tablename__ = "webhook_receipts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    receipt_key: Mapped[str] = mapped_column(String(64), unique=True)
+    received_ms: Mapped[int] = mapped_column(BigInteger, index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    payload: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    result: Mapped[dict] = mapped_column(JSON)

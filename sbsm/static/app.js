@@ -116,8 +116,15 @@ function ledgerTable() {
 }
 function systemView() {
   const r=state.data.readiness;
-  return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Market data", {kite:"Kite",dhan:"Dhan",manual:"Manual"}[r.feed_mode] || "—"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>${marketDataCard(r)}${notificationCard()}${testAlertsCard()}`;
+  return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Market data", {kite:"Kite",dhan:"Dhan",manual:"Manual"}[r.feed_mode] || "—"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>${receiverCard()}${marketDataCard(r)}${notificationCard()}${testAlertsCard()}`;
 }
+function receiverCard() {
+  if (state.source !== "account") return "";
+  const receipts = state.data.receipts || [];
+  const rows = receipts.map(receipt => `<div class="health-row"><div><h3>Receipt #${receipt.id} · ${h(receipt.kind)}</h3><p>${date(receipt.received_ms)} IST · ${h(receipt.result?.reason || "")}</p></div>${badge(receipt.status)}</div>`).join("");
+  return `<article class="card"><div class="card-heading"><div><h2>Durable alert inbox</h2><p class="card-subtitle">Received alerts are saved before the paper worker processes them.</p></div></div><div class="health-list">${rows || "<p>No receipts from the durable receiver yet.</p>"}</div></article>`;
+}
+
 const marketForm = {provider: "", symbol: "ICICIBANK", result: "", busy: false};
 
 function marketDataCard(readiness) {
@@ -193,7 +200,7 @@ async function refresh() {
   if(state.source==="demo"){state.lastUpdated=Date.now();state.error="";render();return;}
   state.loading=true;$("#refresh-button").disabled=true;
   try {
-    const names=["portfolio","orders","fills","signals","skipped","trades","ledger","readiness","summary","notifications"];
+    const names=["portfolio","orders","fills","signals","skipped","trades","ledger","readiness","summary","notifications","receipts"];
     const results=await Promise.all(names.map(name=>api(`/api/${name}${["portfolio","readiness","summary","notifications"].includes(name)?"":`?limit=${state.limit}&order=desc`}`)));
     if(state.source!=="account")return;
     const data={};names.forEach((name,index)=>data[name]=name==="notifications"?results[index]:results[index].items||results[index]);

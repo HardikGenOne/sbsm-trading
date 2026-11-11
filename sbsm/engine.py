@@ -66,7 +66,7 @@ class PaperEngine:
             s.merge(FeedPreference(id=1, provider=provider, selected_ms=max(now, selected_ms + 1)))
             s.add(Audit(time_ms=now, action="SELECT_QUOTE_FEED", detail=provider))
 
-    def ingest(self, signal: Signal):
+    def ingest(self, signal: Signal, received_ms=None):
         now = self.clock()
         body = serialized(signal)
         digest = fingerprint(body)
@@ -86,7 +86,7 @@ class PaperEngine:
                     raise ValueError("Unapproved strategy configuration")
                 if signal.emitted_at_ms > now + 5000:
                     raise ValueError("Signal timestamp is in the future")
-                event = Event(event_id=signal.event_id, cycle_id=signal.trade_cycle_id, symbol=signal.symbol, action=signal.action, payload=body, fingerprint=digest, received_ms=now, status="QUEUED", decision={})
+                event = Event(event_id=signal.event_id, cycle_id=signal.trade_cycle_id, symbol=signal.symbol, action=signal.action, payload=body, fingerprint=digest, received_ms=now if received_ms is None else received_ms, status="QUEUED", decision={})
                 s.add(event)
                 s.flush()
                 result = {"sequence": event.id, "status": "QUEUED", "duplicate": False}
