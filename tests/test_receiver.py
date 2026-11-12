@@ -45,11 +45,11 @@ def test_test_receipt_and_invalid_signal_leave_ledger_untouched(system):
 
 
 def legacy_pine_signal(signal):
-    """Reproduce the original Pine helper's literal backslash+r spelling."""
+    """Reproduce the original Pine helper's JSON-decoded carriage returns."""
     from sbsm.schemas import Signal
     payload = signal.model_dump()
     for key in ('config_key', 'strategy_instance_id', 'event_id', 'trade_cycle_id'):
-        payload[key] = payload[key].replace('r', '\\r')
+        payload[key] = payload[key].replace('r', chr(13))
     return Signal.model_validate(payload)
 
 

@@ -83,11 +83,11 @@ class PaperEngine:
                 if recent >= 120:
                     raise RateLimited("At most 120 new signals per minute")
                 # v1.0.0 Pine's unsupported carriage-return escape encoded each
-                # lowercase r as a literal backslash+r. Accept only the exact
-                # approved configuration in that legacy spelling, preserving
+                # lowercase r as a JSON carriage-return escape. After decoding,
+                # accept only the exact approved config in that legacy spelling; preserve
                 # event/cycle IDs so existing alert snapshots can still exit.
                 approved = self.settings.approved_config
-                if signal.config_key not in {approved, approved.replace("r", "\\r")}:
+                if signal.config_key not in {approved, approved.replace("r", chr(13))}:
                     raise ValueError("Unapproved strategy configuration")
                 if signal.emitted_at_ms > now + 5000:
                     raise ValueError("Signal timestamp is in the future")

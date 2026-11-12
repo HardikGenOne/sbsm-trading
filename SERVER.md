@@ -185,7 +185,8 @@ Verify the connection during market hours before relying on it for fills.
 ### Pine v1.0.0 receipt compatibility
 
 The original JSON helper used an unsupported Pine carriage-return escape, which
-changed the literal r in atr/factor into a backslash+r. The server accepts exactly
+changed the literal r in atr/factor into a JSON carriage-return escape. After
+JSON decoding, the stored field contains control character U+000D. The server accepts exactly
 the approved configuration or its known legacy spelling. It never strips arbitrary
 characters or accepts other parameter values. Original payloads, event IDs and
 cycle IDs remain intact for duplicate detection and matching exits. The Pine source
