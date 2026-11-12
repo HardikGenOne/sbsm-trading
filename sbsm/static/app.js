@@ -96,7 +96,7 @@ function signalTable(skipped=false) {
   const source=skipped?state.data.skipped:state.data.signals;
   const data=source.filter(p=>p.symbol.toLowerCase().includes(state.search.toLowerCase()));
   const rows=data.map(s=>`<tr><td class="time-cell">#${s.id}<br>${h(date(s.received_ms))}</td><td>${stock(s.symbol)}</td><td>${badge(s.action==="ENTER_LONG"?"BUY":"EXIT")}</td><td>${badge(s.status)}</td><td class="reason">${h(human(s.reason))}</td><td>${money(s.decision?.required_paise)}</td><td>${money(s.decision?.available_paise)}</td><td><button class="table-action" data-signal-detail="${s.id}">Inspect</button></td></tr>`).join("");
-  return `<article class="card table-card"><div class="card-heading"><div><h2>${skipped?"Skipped signal decisions":"Received signals"}</h2><p class="card-subtitle">${skipped?"Includes the fund snapshot at the decision":"IDs preserve receipt order; exits receive execution priority"}</p></div>${searchBox()}</div>${data.length?`<div class="table-wrap"><table><thead><tr><th>Receipt</th><th>Stock</th><th>Action</th><th>Outcome</th><th>Reason</th><th>Required</th><th>Available</th><th>Trace</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty(skipped?"No skipped signals":"No signals received",state.search?"No stocks match this search.":skipped?"Every skipped signal will include its reason and allocation details.":"Connect TradingView when you are ready. This inbox does not generate trades on its own.")}${recordFooter(source.length)}</article>`;
+  return `<article class="card table-card"><div class="card-heading"><div><h2>${skipped?"Skipped signal decisions":"Received signals"}</h2><p class="card-subtitle">${skipped?"Includes the fund snapshot at the decision":"IDs preserve receipt order; exits receive execution priority"}</p></div>${searchBox()}</div>${data.length?`<div class="table-wrap"><table><thead><tr><th>Receipt</th><th>Stock</th><th>Action</th><th>Outcome</th><th>Reason</th><th>Required</th><th>Available</th><th>Trace</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty(skipped?"No skipped signals":state.data.receipts?.some(r=>r.kind==="signal")?"No validated signal decisions yet":"No signals received",state.search?"No stocks match this search.":skipped?"Every skipped signal will include its reason and allocation details.":"Saved webhook deliveries appear above. Only validated alerts enter the decision list; rejected alerts retain their reason in the receipts.")}${recordFooter(source.length)}</article>`;
 }
 function ordersTable() {
   const data=state.data.orders.filter(o=>o.symbol.toLowerCase().includes(state.search.toLowerCase()));
@@ -118,11 +118,11 @@ function systemView() {
   const r=state.data.readiness;
   return `<div class="notice">${state.source==="demo"?"You are viewing example checks, not the running server. Switch to your paper account for actual health.":"Readiness verifies live-data paper execution. It does not prove TradingView delivery or guarantee that an individual entry has sufficient funds."}</div><div class="dashboard-grid"><article class="card"><div class="card-heading"><div><h2>Readiness checks</h2><p class="card-subtitle">${state.source==="demo"?"Sandbox environment":r.ready_for_new_entries?"Ready for live-data paper entries":"Some checks are blocked or waiting"}</p></div>${badge(r.ready_for_new_entries?"PASS":"WAITING")}</div><div class="health-list">${r.checks.map(c=>`<div class="health-row"><div><h3>${h(human(c.name))}</h3><p>${h(c.message)}</p></div>${badge(c.status)}</div>`).join("")}</div></article><article class="card"><div class="card-heading"><div><h2>Strategy configuration</h2><p class="card-subtitle">Agreed portfolio rules</p></div></div><div class="config-list">${[["Execution","Paper only"],["Market data", {kite:"Kite",dhan:"Dhan",manual:"Manual"}[r.feed_mode] || "—"],["Stock universe","20 NSE equities"],["Signal timeframe","2 hours"],["Per-trade allocation","12% of realized pool"],["Position limit","One per stock"],["Overnight holding","Enabled"],["Automatic stop-loss","None"],["Exit rule","Matching sell signal"]].map(([key,value])=>`<div class="config-item"><span>${key}</span><strong>${value}</strong></div>`).join("")}</div></article></div>${receiverCard()}${marketDataCard(r)}${notificationCard()}${testAlertsCard()}`;
 }
-function receiverCard() {
+function receiverCard(signalOnly=false) {
   if (state.source !== "account") return "";
-  const receipts = state.data.receipts || [];
-  const rows = receipts.map(receipt => `<div class="health-row"><div><h3>Receipt #${receipt.id} · ${h(receipt.kind)}</h3><p>${date(receipt.received_ms)} IST · ${h(receipt.result?.reason || "")}</p></div>${badge(receipt.status)}</div>`).join("");
-  return `<article class="card"><div class="card-heading"><div><h2>Durable alert inbox</h2><p class="card-subtitle">Received alerts are saved before the paper worker processes them.</p></div></div><div class="health-list">${rows || "<p>No receipts from the durable receiver yet.</p>"}</div></article>`;
+  const receipts = (state.data.receipts || []).filter(r => (!signalOnly || r.kind === "signal") && (!signalOnly || (r.payload?.symbol || "").toLowerCase().includes(state.search.toLowerCase())));
+  const rows = receipts.map(receipt => `<div class="health-row"><div><h3>Receipt #${receipt.id} · ${h(receipt.payload?.symbol || receipt.kind)}${receipt.kind === "signal" ? " · " + h(receipt.payload?.action || "Unknown action") : ""}</h3><p>${date(receipt.received_ms)} IST · ${h(receipt.result?.reason || "")}</p></div>${badge(receipt.status)}</div>`).join("");
+  return `<article class="card"><div class="card-heading"><div><h2>${signalOnly ? "Webhook receipts" : "Durable alert inbox"}</h2><p class="card-subtitle">All saved deliveries, including pending and rejected alerts. Validated signals produce decisions below; receipt and decision numbers are separate.</p></div></div><div class="health-list">${rows || "<p>No receipts from the durable receiver yet.</p>"}</div></article>`;
 }
 
 const marketForm = {provider: "", symbol: "ICICIBANK", result: "", busy: false};
@@ -179,7 +179,7 @@ function render() {
     case "positions":content=positionsTable();break;
     case "orders":content=ordersTable();break;
     case "fills":content=fillsTable();break;
-    case "signals":content=signalTable();break;
+    case "signals":content=receiverCard(true)+signalTable();break;
     case "skipped":content=signalTable(true);break;
     case "history":content=historyTable();break;
     case "ledger":content=ledgerTable();break;

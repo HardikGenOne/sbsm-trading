@@ -33,8 +33,12 @@ def drain_inbox(engine, limit=100):
             break
         except SignalConflict:
             result, status = {"reason": "EVENT_ID_CONFLICT"}, "REJECTED"
-        except ValueError:
-            result, status = {"reason": "INVALID_SIGNAL_CONTRACT_OR_CONFIG"}, "REJECTED"
+        except ValueError as exc:
+            reason = {
+                "Unapproved strategy configuration": "UNAPPROVED_STRATEGY_CONFIG",
+                "Signal timestamp is in the future": "FUTURE_SIGNAL_TIMESTAMP",
+            }.get(str(exc), "INVALID_SIGNAL_CONTRACT_OR_CONFIG")
+            result, status = {"reason": reason}, "REJECTED"
         with engine.db.write() as (session, _):
             current = session.get(WebhookReceipt, receipt.id)
             if current.status != "RECEIVED":

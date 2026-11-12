@@ -181,3 +181,15 @@ Dhan quotes use the NSE equity instrument master and two-sided market depth.
 The reported last-trade time is a conservative freshness proxy. An old trade
 can delay a simulated fill even when a recent depth snapshot is available.
 Verify the connection during market hours before relying on it for fills.
+
+### Pine v1.0.0 receipt compatibility
+
+The original JSON helper used an unsupported Pine carriage-return escape, which
+changed the literal r in atr/factor into a backslash+r. The server accepts exactly
+the approved configuration or its known legacy spelling. It never strips arbitrary
+characters or accepts other parameter values. Original payloads, event IDs and
+cycle IDs remain intact for duplicate detection and matching exits. The Pine source
+helper is corrected for future alert snapshots; existing alerts need no recreation
+for this server compatibility fix. Do not switch an active position's alert to a
+new identity spelling without planning its cycle transition. Rejected receipts
+remain visible in Signal inbox and System health.

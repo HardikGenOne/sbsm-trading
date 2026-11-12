@@ -48,7 +48,7 @@ f_quote(string value) =>
     string escaped = str.replace_all(value, "\\", "\\\\")
     escaped := str.replace_all(escaped, "\"", "\\\"")
     escaped := str.replace_all(escaped, "\n", "\\n")
-    escaped := str.replace_all(escaped, "\r", "\\r")
+    // Pine has no carriage-return escape; using it would replace literal r characters.
     escaped := str.replace_all(escaped, "\t", "\\t")
     "\"" + escaped + "\""
 
