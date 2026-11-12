@@ -120,7 +120,7 @@ function systemView() {
 }
 function receiverCard(signalOnly=false) {
   if (state.source !== "account") return "";
-  const receipts = (state.data.receipts || []).filter(r => (!signalOnly || r.kind === "signal") && (!signalOnly || (r.payload?.symbol || "").toLowerCase().includes(state.search.toLowerCase())));
+  const receipts = (state.data.receipts || []).filter(r => (!signalOnly || r.kind === "signal") && (!signalOnly || String(r.payload?.symbol || "").toLowerCase().includes(state.search.toLowerCase())));
   const rows = receipts.map(receipt => `<div class="health-row"><div><h3>Receipt #${receipt.id} · ${h(receipt.payload?.symbol || receipt.kind)}${receipt.kind === "signal" ? " · " + h(receipt.payload?.action || "Unknown action") : ""}</h3><p>${date(receipt.received_ms)} IST · ${h(receipt.result?.reason || "")}</p></div>${badge(receipt.status)}</div>`).join("");
   return `<article class="card"><div class="card-heading"><div><h2>${signalOnly ? "Webhook receipts" : "Durable alert inbox"}</h2><p class="card-subtitle">All saved deliveries, including pending and rejected alerts. Validated signals produce decisions below; receipt and decision numbers are separate.</p></div></div><div class="health-list">${rows || "<p>No receipts from the durable receiver yet.</p>"}</div></article>`;
 }
