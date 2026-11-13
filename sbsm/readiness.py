@@ -2,7 +2,7 @@
 from sqlalchemy import func, select
 
 from .market import feed_configured
-from .models import Event, Quote
+from .models import Event, Quote, NotificationState
 
 
 def report(engine):
@@ -30,6 +30,13 @@ def report(engine):
     else:
         add("feed", "PASS", "Market-data credentials are configured; freshness below verifies usable quote delivery.")
 
+    with engine.db.read() as session:
+        saved_probe = session.get(NotificationState, 'dhan_startup') if provider == 'dhan' else None
+        startup = saved_probe.value if saved_probe else None
+    if startup:
+        status = 'PASS' if startup['status'] == 'READY' else 'BLOCKED' if startup['status'] == 'FAILED' else 'WAITING'
+        add('startup', status, startup['message'])
+
     market_open = False
     calendar_valid = True
     try:
@@ -53,6 +60,7 @@ def report(engine):
         "mode": "paper",
         "feed_mode": provider,
         "providers": providers,
+        "dhan_startup": startup,
         "ready_for_new_entries": all(check["status"] == "PASS" for check in checks),
         "checks": checks,
         "pending_signals": pending,

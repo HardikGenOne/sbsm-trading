@@ -11,6 +11,7 @@ from .market import MarketCalendar, quote_feed
 from .models import Audit
 from .notifications import enqueue
 from .receiver import drain_inbox
+from .startup_quotes import warm_dhan, recover_startup
 
 log = logging.getLogger("sbsm.worker")
 
@@ -28,6 +29,7 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     last_error_at = 0
+    warmup_pending = False
     with db.read() as session:
         transition = session.scalar(select(Audit).where(Audit.action.in_(("WORKER_ERROR", "WORKER_RECOVERED"))).order_by(Audit.id.desc()))
         error_active = bool(transition and transition.action == "WORKER_ERROR")
@@ -35,20 +37,27 @@ def main():
     try:
         while not stop.is_set():
             try:
-                drain_inbox(engine)
-                engine.step()
                 with db.read() as s:
                     selection = engine.active_feed(s)
                 if provider != selection[0]:
                     if feed is not None:
                         feed.close()
                     provider, feed = selection[0], quote_feed(settings, selection[0])
+                    if provider == 'dhan':
+                        warmup_pending = not warm_dhan(engine, feed, selection)
+                # Every Dhan worker startup/switch attempts the bounded read-only
+                # warm-up before admitting receipts. Failed tests never drop them.
+                drain_inbox(engine)
+                engine.step()
                 if feed is not None and calendar.is_open(now_ms()):
                     # A single read-only probe keeps feed readiness observable before
                     # the first signal; never synthesize an entry just to test access.
                     symbols = list(SYMBOLS) if provider == "dhan" else (engine.watch_symbols() or ["ICICIBANK"])
-                    for quote in feed.fetch(symbols):
+                    quotes = feed.fetch(symbols)
+                    for quote in quotes:
                         engine.quote(quote, provider, selection=selection, observed_ms=getattr(feed, "observed_ms", None))
+                    if provider == 'dhan' and warmup_pending:
+                        warmup_pending = not recover_startup(engine, quotes)
                 engine.step()
                 if error_active:
                     with db.write() as (s, _):

@@ -217,3 +217,17 @@ The dashboard preserves its provider, symbol and pending result, and retries
 429/503 responses at most twice automatically. Expired orders are not replayed;
 TTL, price protection, fees, liquidity and freshness rules remain unchanged.
 Render Free cold starts and broker outages can still delay processing.
+
+### Dhan startup warm-up
+
+Before admitting saved alerts on worker startup or switching to Dhan, the worker
+attempts one bounded read-only 20-stock quote request, including outside market
+hours. This primes the shared daily instrument map and quote cache. System health
+shows WARMING, READY, WAITING or FAILED via the existing readiness report. An
+outcome notification is queued for Telegram independently of quote retrieval.
+Closed-market or stale snapshots never produce a READY result. Normal market-hour
+polling continues and promotes a pending/failed startup test to READY when fresh
+quotes recover, with one recovery notification. Broker calls happen outside the
+account lock. Warm-up creates no signal, reservation, order or fill. It neither
+renews credentials nor prevents Render Free from sleeping. Persisted receipts and
+existing order deadlines are unchanged when a startup test fails.
