@@ -4,7 +4,7 @@ import signal
 import threading
 from sqlalchemy import select
 
-from .config import Settings
+from .config import Settings, SYMBOLS
 from .database import Database
 from .engine import PaperEngine, now_ms
 from .market import MarketCalendar, quote_feed
@@ -46,7 +46,7 @@ def main():
                 if feed is not None and calendar.is_open(now_ms()):
                     # A single read-only probe keeps feed readiness observable before
                     # the first signal; never synthesize an entry just to test access.
-                    symbols = engine.watch_symbols() or ["ICICIBANK"]
+                    symbols = list(SYMBOLS) if provider == "dhan" else (engine.watch_symbols() or ["ICICIBANK"])
                     for quote in feed.fetch(symbols):
                         engine.quote(quote, provider, selection=selection)
                 engine.step()

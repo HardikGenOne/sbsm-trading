@@ -42,7 +42,7 @@ For separate terminals, run `uvicorn sbsm.api:create_app --factory --host 127.0.
 
 ## Real market-data setup
 
-Default `SBSM_FEED_MODE=kite` uses **read-only** Kite HTTP quote snapshots and the NSE instrument master. It requires a Kite app with live-market-data permissions and an active session. A TradingView subscription does not provide this feed.
+`SBSM_FEED_MODE=kite` uses **read-only** Kite HTTP quote snapshots and the NSE instrument master. It requires a Kite app with live-market-data permissions and an active session. A TradingView subscription does not provide this feed.
 
 1. Configure the Kite app's redirect URL in its developer console.
 2. Run `.venv/bin/python scripts/kite_login.py` locally.
@@ -171,7 +171,7 @@ Back up the database with SQLite's online backup API (not a bare copy of the `.d
 
 ### Dhan Data API
 
-Kite remains the default quote source. To use Dhan for equity paper fills, set
+Dhan is the default quote source; Kite remains selectable. For Dhan equity paper fills, set
 `SBSM_FEED_MODE=dhan`, `SBSM_DHAN_CLIENT_ID` and `SBSM_DHAN_ACCESS_TOKEN`
 in the private server environment and restart the API and worker together.
 System health shows the active source. Keep the credentials in the server's
@@ -194,3 +194,24 @@ helper is corrected for future alert snapshots; existing alerts need no recreati
 for this server compatibility fix. Do not switch an active position's alert to a
 new identity spelling without planning its cycle transition. Rejected receipts
 remain visible in Signal inbox and System health.
+
+### Shared Dhan quote requests
+
+The supervised API and worker coordinate through private local market-cache files
+under `SBSM_MARKET_CACHE_DIR` (default `data/market-cache`). The daily instrument
+map and two-second broker response are reused across processes. A file lock
+serializes broker calls with minimum 1.25-second spacing. Requests batch the
+approved universe, and the Dhan worker records all 20 stocks each polling cycle.
+429 and transient failures use a shared bounded cooldown. Authentication failures
+are reported separately; changing credentials invalidates the cache. No token or
+client ID is stored in cache contents. Quote timestamps remain the broker's last
+trade time; a cache hit never makes an old quote fresh or resets depth consumption.
+
+Coordination is for one host/container, matching the current supervised service.
+Multiple replicas or other applications using the same Dhan account need shared
+account-wide coordination. The files are disposable and never replace the SQL
+ledger. Network calls hold the quote-cache lock, never the account/ledger lock.
+The dashboard preserves its provider, symbol and pending result, and retries
+429/503 responses at most twice automatically. Expired orders are not replayed;
+TTL, price protection, fees, liquidity and freshness rules remain unchanged.
+Render Free cold starts and broker outages can still delay processing.

@@ -33,7 +33,7 @@ class Calendar:
 @pytest.fixture
 def system(tmp_path):
     clock, calendar = Clock(), Calendar()
-    settings = Settings(_env_file=None, admin_token="a" * 40, webhook_token="b" * 40, database_url=f"sqlite:///{tmp_path / 'test.db'}", feed_mode="manual", execution_latency_ms=0, settlement_mode="immediate", slippage_bps=0, price_protection_bps=100, depth_participation_bps=10000)
+    settings = Settings(_env_file=None, admin_token="a" * 40, webhook_token="b" * 40, database_url=f"sqlite:///{tmp_path / 'test.db'}", feed_mode="manual", market_cache_dir=tmp_path / "market-cache", execution_latency_ms=0, settlement_mode="immediate", slippage_bps=0, price_protection_bps=100, depth_participation_bps=10000)
     db = Database(settings.database_url)
     db.initialize(settings.initial_capital_paise, clock())
     engine = PaperEngine(db, settings, calendar, clock)

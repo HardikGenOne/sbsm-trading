@@ -221,11 +221,19 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
             quotes = feed.fetch([symbol])
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
-            if code in (401, 403):
-                raise HTTPException(502, "Broker rejected the credentials or market-data permissions") from None
+            if code == 401:
+                raise HTTPException(502, "Broker rejected the access token. Check its validity and restart after renewal.") from None
+            if code == 403:
+                raise HTTPException(502, "Broker denied market-data access. Check the token and Data API subscription.") from None
             if code == 429:
-                raise HTTPException(429, "Broker rate limit reached. Retry in a few seconds.") from None
+                raise HTTPException(429, "Broker rate limit reached. Waiting before retrying.",
+                                    headers={"Retry-After": exc.response.headers.get("Retry-After", "3")}) from None
+            if code >= 500:
+                raise HTTPException(503, "Broker temporarily unavailable. Waiting before retrying.",
+                                    headers={"Retry-After": exc.response.headers.get("Retry-After", "3")}) from None
             raise HTTPException(502, "Broker quote request failed") from None
+        except TimeoutError:
+            raise HTTPException(503, "Another quote request is running. Please retry shortly.", headers={"Retry-After": "2"}) from None
         except (httpx.HTTPError, ArithmeticError, KeyError, TypeError, ValueError):
             raise HTTPException(502, "Broker did not return usable market data") from None
         finally:

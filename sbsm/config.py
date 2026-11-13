@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     admin_token: SecretStr
     webhook_token: SecretStr
     database_url: str = f"sqlite:///{ROOT / 'data/paper.db'}"
-    feed_mode: Literal["kite", "dhan", "manual"] = "kite"
+    feed_mode: Literal["kite", "dhan", "manual"] = "dhan"
+    market_cache_dir: Path = ROOT / "data" / "market-cache"
     kite_api_key: SecretStr = SecretStr("")
     kite_access_token: SecretStr = SecretStr("")
     dhan_client_id: SecretStr = SecretStr("")

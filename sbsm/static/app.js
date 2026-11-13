@@ -125,19 +125,19 @@ function receiverCard(signalOnly=false) {
   return `<article class="card"><div class="card-heading"><div><h2>${signalOnly ? "Webhook receipts" : "Durable alert inbox"}</h2><p class="card-subtitle">All saved deliveries, including pending and rejected alerts. Validated signals produce decisions below; receipt and decision numbers are separate.</p></div></div><div class="health-list">${rows || "<p>No receipts from the durable receiver yet.</p>"}</div></article>`;
 }
 
-const marketForm = {provider: "", symbol: "ICICIBANK", result: "", busy: false};
+const marketForm = {provider: "dhan", symbol: "ICICIBANK", result: "", busy: false};
 
 function marketDataCard(readiness) {
   if (state.source !== "account" || !readiness.providers) return "";
   const names = {kite: "Kite", dhan: "Dhan", manual: "Manual"};
-  const providers = ["kite", "dhan"];
+  const providers = ["dhan", "kite"];
   const options = providers.map(provider => `<option value="${provider}" ${(marketForm.provider || readiness.feed_mode) === provider ? "selected" : ""}>${names[provider]}</option>`).join("");
   const status = providers.map(provider => `<div class="health-row"><strong>${names[provider]}</strong>${badge(readiness.providers[provider] ? "CONFIGURED" : "MISSING CREDENTIALS")}</div>`).join("");
   return `<article class="card"><div class="card-heading"><div><h2>Market data</h2><p class="card-subtitle">Active paper feed · ${h(names[readiness.feed_mode] || "—")}</p></div></div>
     <div class="health-list">${status}
-    <div><label for="market-provider">Provider</label> <select id="market-provider">${options}</select>
+    <div><label for="market-provider">Provider</label> <select id="market-provider" ${marketForm.busy ? "disabled" : ""}>${options}</select>
     <button class="button secondary" id="market-activate" ${marketForm.busy ? "disabled" : ""}>Set active provider</button></div>
-    <div><label for="market-symbol">SBSM stock</label> <input id="market-symbol" value="${h(marketForm.symbol)}" maxlength="36">
+    <div><label for="market-symbol">SBSM stock</label> <input id="market-symbol" ${marketForm.busy ? "disabled" : ""} value="${h(marketForm.symbol)}" maxlength="36">
     <button class="button secondary" id="market-test" ${marketForm.busy ? "disabled" : ""}>Test quote</button></div>
     <p id="market-result" role="status">${h(marketForm.result || "Test the selected provider for its latest price and market depth.")}</p></div></article>`;
 }
@@ -192,11 +192,11 @@ async function api(path,options={}) {
   const headers={...(options.body?{"Content-Type":"application/json"}:{}),...(state.csrf?{"X-CSRF-Token":state.csrf}:{}),...options.headers};
   const response=await fetch(path,{...options,headers,credentials:"same-origin",cache:"no-store"});
   if(response.status===401){state.authenticated=false;state.csrf=null;throw new Error("Your session expired. Reconnect your paper account.");}
-  if(!response.ok){let detail="Request failed. Please retry.";try{detail=(await response.json()).detail||detail;}catch{}throw new Error(typeof detail==="string"?detail:"Request could not be completed.");}
+  if(!response.ok){let detail="Request failed. Please retry.";try{detail=(await response.json()).detail||detail;}catch{}const error=new Error(typeof detail==="string"?detail:"Request could not be completed.");error.status=response.status;error.retryAfter=Number(response.headers.get("Retry-After"))||3;throw error;}
   return response.json();
 }
 async function refresh() {
-  if(state.loading)return;
+  if(state.loading||marketForm.busy)return;
   if(state.source==="demo"){state.lastUpdated=Date.now();state.error="";render();return;}
   state.loading=true;$("#refresh-button").disabled=true;
   try {
@@ -260,9 +260,12 @@ document.addEventListener("click",async event=>{
   if (target.id === "market-test" || target.id === "market-activate") {
     if (state.source !== "account") return;
     const provider = $("#market-provider").value;
+    marketForm.provider = provider;
+    marketForm.symbol = $("#market-symbol").value;
     if (marketForm.busy) return;
     marketForm.busy = true;
     target.disabled = true;
+    render();
     const showResult = message => {
       marketForm.result = message;
       const result = $("#market-result");
@@ -278,18 +281,28 @@ document.addEventListener("click",async event=>{
         const symbol = $("#market-symbol").value.trim();
         if (!symbol) { showResult("Enter a stock symbol."); return; }
         showResult("Requesting quote…");
-        const data = await api(`/api/market-data/quote?${new URLSearchParams({provider,symbol})}`);
+        let data;
+        for (let attempt=0; attempt<3; attempt++) {
+          try {data=await api(`/api/market-data/quote?${new URLSearchParams({provider,symbol})}`,{signal:AbortSignal.timeout(20000)});break;}
+          catch(error) {
+            if(![429,503].includes(error.status)||attempt===2)throw error;
+            const seconds=Math.min(10,Math.max(1,error.retryAfter));
+            showResult(`Broker busy; retrying automatically in ${seconds}s…`);
+            await new Promise(resolve=>setTimeout(resolve,seconds*1000));
+          }
+        }
         const q = data.quote;
         showResult(q ? `${data.provider.toUpperCase()} · ${data.symbol} · LTP ₹${q.last_price} · Bid ₹${q.bid} × ${q.bid_quantity} · Ask ₹${q.ask} × ${q.ask_quantity} · ${date(q.asof_ms)} IST · ${data.fresh ? "Fresh" : "Stale"}` :
           `${data.provider.toUpperCase()} · ${data.symbol} · No usable two-sided quote. Check market hours and data access.`);
       }
-    } catch (error) { showResult(error.message); }
+    } catch (error) { showResult(["TimeoutError","AbortError"].includes(error.name) ? "The server is taking longer than expected to respond. The form is preserved; try again shortly." : error.message); }
     finally {
       marketForm.busy = false;
-      for (const id of ["market-test", "market-activate"]) {
+      for (const id of ["market-test", "market-activate", "market-provider", "market-symbol"]) {
         const button = document.getElementById(id);
         if (button) button.disabled = false;
       }
+      if (target.id === "market-activate") await refresh();
     }
     return;
   }
