@@ -108,16 +108,19 @@ class PaperEngine:
             raise RuntimeError("Accounting invariant violated; transaction rolled back")
         s.add(Ledger(kind=kind, time_ms=now, order_id=order_id, cash_delta=cash, reserve_delta=reserve, unsettled_delta=unsettled, realized_delta=realized, cash_after=a.cash, reserved_after=a.reserved, unsettled_after=a.unsettled, realized_after=a.realized))
 
-    def quote(self, value: QuoteInput, source: str, selection=None):
+    def quote(self, value: QuoteInput, source: str, selection=None, observed_ms=None):
         now = self.clock()
         if value.asof_ms > now + 2000:
             raise ValueError("Quote timestamp is in the future")
+        observed = now if observed_ms is None else observed_ms
+        if not 0 <= observed <= now:
+            raise ValueError("Invalid quote observation time")
         digest = hashlib.sha256((source + value.model_dump_json()).encode()).hexdigest()
         with self.db.write() as (s, _):
             if selection is not None and selection != self.active_feed(s):
                 return None
             if not s.get(Quote, digest):
-                s.add(Quote(id=digest, symbol=value.symbol, source=source, asof_ms=value.asof_ms, observed_ms=now, bid=paise(value.bid), ask=paise(value.ask), bid_quantity=value.bid_quantity, ask_quantity=value.ask_quantity, last=paise(value.last_price), tick=max(1, paise(value.tick_size)), bid_used=0, ask_used=0))
+                s.add(Quote(id=digest, symbol=value.symbol, source=source, asof_ms=value.asof_ms, observed_ms=observed, bid=paise(value.bid), ask=paise(value.ask), bid_quantity=value.bid_quantity, ask_quantity=value.ask_quantity, last=paise(value.last_price), tick=max(1, paise(value.tick_size)), bid_used=0, ask_used=0))
         return digest
 
     def skip(self, event, reason, **details):

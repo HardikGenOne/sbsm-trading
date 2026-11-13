@@ -205,7 +205,9 @@ approved universe, and the Dhan worker records all 20 stocks each polling cycle.
 429 and transient failures use a shared bounded cooldown. Authentication failures
 are reported separately; changing credentials invalidates the cache. No token or
 client ID is stored in cache contents. Quote timestamps remain the broker's last
-trade time; a cache hit never makes an old quote fresh or resets depth consumption.
+trade time; the original fetch observation time is preserved too, so a cached
+pre-entry snapshot cannot become eligible by being read after entry. A cache hit
+never makes an old quote fresh or resets depth consumption.
 
 Coordination is for one host/container, matching the current supervised service.
 Multiple replicas or other applications using the same Dhan account need shared

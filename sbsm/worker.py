@@ -48,7 +48,7 @@ def main():
                     # the first signal; never synthesize an entry just to test access.
                     symbols = list(SYMBOLS) if provider == "dhan" else (engine.watch_symbols() or ["ICICIBANK"])
                     for quote in feed.fetch(symbols):
-                        engine.quote(quote, provider, selection=selection)
+                        engine.quote(quote, provider, selection=selection, observed_ms=getattr(feed, "observed_ms", None))
                 engine.step()
                 if error_active:
                     with db.write() as (s, _):

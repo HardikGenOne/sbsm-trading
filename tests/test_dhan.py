@@ -228,3 +228,24 @@ def test_diagnostic_distinguishes_credentials_rate_limit_and_temporary_failure(s
             assert response.status_code==expected
             assert word in response.json()['detail']
             if code in (429,503):assert response.headers['Retry-After']=='4'
+
+
+def test_cached_pre_entry_snapshot_cannot_be_retimed_into_a_fill(system):
+    from sbsm.schemas import QuoteInput
+    engine,clock,_=system
+    configure_dhan(engine)
+    engine.settings.feed_mode='dhan'
+    observed=clock()
+    old=QuoteInput(symbol='ICICIBANK',asof_ms=observed,bid=999,ask=1000,
+                   bid_quantity=1000,ask_quantity=1000,last_price=1000)
+    clock.advance()
+    engine.ingest(make_signal(engine))
+    engine.step()
+    # The API fetched before admission; the worker reads its cache afterward.
+    engine.quote(old,'dhan',observed_ms=observed)
+    engine.step()
+    assert engine.portfolio()['positions']==[]
+    clock.advance()
+    engine.quote(old.model_copy(update={'asof_ms':clock()}),'dhan',observed_ms=clock())
+    engine.step()
+    assert len(engine.portfolio()['positions'])==1

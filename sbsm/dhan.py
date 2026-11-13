@@ -24,6 +24,7 @@ class DhanQuotes:
         self.client = client if client is not None else httpx.Client(base_url="https://api.dhan.co", timeout=5)
         self.instruments = {}
         self.instrument_date = None
+        self.observed_ms = None
         # Rotation gets a new cache; never reuse quotes from another credential.
         identity = hashlib.sha256((self.client_id + ":" + self.access_token).encode()).hexdigest()
         self.cache_path = settings.market_cache_dir / ("dhan-" + identity + ".json")
@@ -60,6 +61,7 @@ class DhanQuotes:
             now = time.time()
             age = now - state.get("fetched_at", 0)
             if state.get("body") and 0 <= age < 2:
+                self.observed_ms = int(state["fetched_at"] * 1000)
                 return json.loads(state["body"], parse_float=Decimal)
             retry_at = state.get("retry_at", 0)
             if now < retry_at:
@@ -104,6 +106,7 @@ class DhanQuotes:
                 state.update(failures=failures, error_status=status, retry_at=time.time() + delay)
                 raise
             state.update(body=response.text, fetched_at=time.time(), failures=0, retry_at=0)
+            self.observed_ms = int(state["fetched_at"] * 1000)
             return payload
 
     def fetch(self, symbols: list[str]) -> list[QuoteInput]:
