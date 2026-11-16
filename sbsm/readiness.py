@@ -21,7 +21,7 @@ def report(engine):
         provider, selected_ms = engine.active_feed(session)
         last_quote = session.scalar(select(Quote).where(
             Quote.source == provider, Quote.observed_ms >= selected_ms,
-        ).order_by(Quote.asof_ms.desc()))
+        ).order_by(Quote.asof_ms.desc()).limit(1))
     providers = {name: feed_configured(settings, name) for name in ("kite", "dhan")}
     if provider == "manual":
         add("feed", "BLOCKED", "Manual quotes are synthetic. Select Kite or Dhan for live-data paper trading.")

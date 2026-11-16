@@ -206,7 +206,7 @@ class PaperEngine:
 
     def fresh_quote(self, s, order, now, selection):
         provider, selected_ms = selection
-        q = s.scalar(select(Quote).where(Quote.symbol == order.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
+        q = s.scalar(select(Quote).where(Quote.symbol == order.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()).limit(1))
         if not q or q.id == order.last_quote_id:
             return None
         if not 0 <= now - q.asof_ms <= self.settings.quote_max_age_seconds * 1000:
@@ -355,7 +355,7 @@ class PaperEngine:
             all_marked = True
             market_value = 0
             for p in s.scalars(select(Position).where(Position.quantity > 0).order_by(Position.symbol)):
-                q = s.scalar(select(Quote).where(Quote.symbol == p.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()))
+                q = s.scalar(select(Quote).where(Quote.symbol == p.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()).limit(1))
                 stale = not q or not 0 <= now - q.asof_ms <= self.settings.quote_max_age_seconds * 1000
                 all_marked = all_marked and not stale
                 value = q.last * p.quantity if q else None

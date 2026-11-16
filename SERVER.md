@@ -246,3 +246,8 @@ continue to use readiness; a 200 liveness response does not mean trading is read
 A temporary Neon/broker outage must not cause a dependency-driven restart loop.
 The Vercel receiver's durable receipts remain the alert entry point. Render Free
 can still sleep, restart or fail; this change is not an uptime or delivery guarantee.
+
+Latest-quote lookups in readiness, valuation and paper fills apply SQL LIMIT 1
+with the existing provider/selection filters and timestamp ordering. Returning
+one quote must not transfer the full stored quote history to a free instance.
+This changes query cost, not which snapshot or trading rules are used.
