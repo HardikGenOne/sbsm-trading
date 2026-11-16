@@ -101,8 +101,8 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
     async def bad_request(request, exc):
         return JSONResponse(status_code=422, content={"detail": [{"loc": e["loc"], "message": e["msg"]} for e in exc.errors()]})
 
-    @app.get("/health")
-    def health():
+    @app.api_route("/health", methods=["GET", "HEAD"])
+    async def health():
         return {"service": "sbsm-paper", "mode": "paper"}
 
     @app.api_route("/health/ready", methods=["GET", "HEAD"])

@@ -27,6 +27,19 @@ def commands(settings, host, port):
     return result
 
 
+def liveness_ok(client, port):
+    # Dependency readiness stays visible separately. Restarting every process
+    # cannot repair Neon/broker outages and interrupts receipt recovery.
+    try:
+        response = client.get(f"http://127.0.0.1:{port}/health")
+        if response.status_code == 200:
+            return True
+        log.warning("API liveness check returned HTTP %s", response.status_code)
+    except httpx.HTTPError as exc:
+        log.warning("API liveness check failed (%s)", type(exc).__name__)
+    return False
+
+
 def supervise(settings, host, port):
     db = Database(settings.database_url)
     db.initialize(settings.initial_capital_paise, now_ms())
@@ -49,13 +62,10 @@ def supervise(settings, host, port):
                 current = time.monotonic()
                 if current - started > 60 and current - last_check >= 10:
                     last_check = current
-                    try:
-                        healthy = client.get(f"http://127.0.0.1:{port}/health/ready").status_code == 200
-                    except httpx.HTTPError:
-                        healthy = False
+                    healthy = liveness_ok(client, port)
                     misses = 0 if healthy else misses + 1
                     if misses >= 3:
-                        log.error("Operational health checks failed; stopping for a clean restart")
+                        log.error("API liveness checks failed; stopping for a clean restart")
                         failed = True
                         break
     finally:

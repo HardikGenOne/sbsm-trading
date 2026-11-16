@@ -231,3 +231,18 @@ quotes recover, with one recovery notification. Broker calls happen outside the
 account lock. Warm-up creates no signal, reservation, order or fill. It neither
 renews credentials nor prevents Render Free from sleeping. Persisted receipts and
 existing order deadlines are unchanged when a startup test fails.
+
+
+### Render liveness and dependency readiness
+
+Render's instance health-check path and the local supervisor use `/health`.
+This async route checks the HTTP process without using SQL, the worker or a broker.
+The supervisor still restarts when a child process exits or three consecutive
+HTTP liveness checks fail. Failures log their HTTP status or safe error category.
+
+`/health/ready` remains the database/worker readiness check and returns 503 when
+its worker heartbeat is stale. Cron warming and operational monitoring should
+continue to use readiness; a 200 liveness response does not mean trading is ready.
+A temporary Neon/broker outage must not cause a dependency-driven restart loop.
+The Vercel receiver's durable receipts remain the alert entry point. Render Free
+can still sleep, restart or fail; this change is not an uptime or delivery guarantee.

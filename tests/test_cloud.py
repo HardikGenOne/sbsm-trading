@@ -90,3 +90,38 @@ def test_head_health_checks_readiness_without_response_body(system):
         assert result.content == b""
         clock.advance(31000)
         assert client.head("/health/ready").status_code == 503
+
+
+def test_liveness_stays_available_when_database_readiness_fails(system, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    engine, clock, calendar = system
+    with TestClient(create_app(engine.settings, engine.db, calendar, clock)) as client:
+        def unavailable():
+            raise OperationalError("probe", {}, Exception("database unavailable"))
+        monkeypatch.setattr(engine.db, "read", unavailable)
+        assert client.get("/health").status_code == 200
+        assert client.head("/health").status_code == 200
+        assert client.head("/health").content == b""
+        assert client.get("/health/ready").status_code == 503
+
+
+def test_supervisor_probes_liveness_and_reports_failure_safely(caplog):
+    import httpx
+    from sbsm.service import liveness_ok
+    requests = []
+    status = 200
+    def respond(request):
+        requests.append(request.url.path)
+        if status == 0:
+            raise httpx.ReadTimeout("private error body", request=request)
+        return httpx.Response(status)
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        assert liveness_ok(client, 10000)
+        status = 503
+        assert not liveness_ok(client, 10000)
+        status = 0
+        assert not liveness_ok(client, 10000)
+    assert requests == ["/health"] * 3
+    assert "HTTP 503" in caplog.text
+    assert "ReadTimeout" in caplog.text
+    assert "private error body" not in caplog.text
