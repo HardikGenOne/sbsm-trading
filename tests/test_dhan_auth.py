@@ -255,3 +255,38 @@ def test_migration_from_existing_outbox_preserves_funds(system):
     engine.db.initialize(engine.settings.initial_capital_paise, clock())
     assert financial_snapshot(engine) == before
     assert row(engine) is None
+
+
+@pytest.mark.parametrize("envelope", [False, True])
+def test_renewal_response_variants_are_verified_and_recoverable(system, envelope):
+    import json
+    from sbsm.models import NotificationState
+    engine, clock, _ = system
+    payload = {"access_token": NEW}
+    if envelope:
+        payload = {"status": "success", "data": payload}
+    manager, calls = setup_auth(system, lambda request: httpx.Response(200, json=payload)
+                                if request.url.path.endswith("RenewToken") else None)
+    manager.tick()
+    manager.tick(force=True)
+    assert row(engine).status == "READY"
+    assert effective_settings(engine.settings, engine.db).dhan_access_token.get_secret_value() == NEW
+    with engine.db.read() as s:
+        saved = s.get(NotificationState, "dhan_renewal_recovery").value
+    assert OLD not in str(saved) and NEW not in str(saved)
+    cipher = Fernet(engine.settings.broker_token_key.get_secret_value().encode())
+    assert json.loads(cipher.decrypt(saved["ciphertext"].encode())) == payload
+
+
+def test_unknown_response_remains_encrypted_for_recovery(system):
+    from sbsm.models import NotificationState
+    engine, clock, _ = system
+    manager, _ = setup_auth(system, lambda r: httpx.Response(200, text='{"futureShape":"'+NEW+'"}')
+                            if r.url.path.endswith("RenewToken") else None)
+    manager.tick()
+    manager.tick(force=True)
+    assert row(engine).reason == "INVALID_RENEWAL_RESPONSE"
+    with engine.db.read() as s:
+        saved = s.get(NotificationState, "dhan_renewal_recovery").value
+    assert NEW not in str(saved)
+    assert NEW in Fernet(engine.settings.broker_token_key.get_secret_value().encode()).decrypt(saved["ciphertext"].encode()).decode()

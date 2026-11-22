@@ -325,7 +325,8 @@ through generic dashboard rows or grant the restricted webhook receiver access.
 No financial table, fund allocation, fill rule or exit rule is changed.
 
 A committed compare-and-swap lease prevents concurrent renewal requests.
-Network calls hold no account or token-row lock. Save the returned replacement
+Network calls hold no account or token-row lock. Save the full successful broker response encrypted in the private
+`notification_state` recovery record before parsing it. Save the replacement
 before profile verification; transient profile errors retry without re-renewing.
 A timeout, invalid response or abandoned renewal may mean the old token was
 invalidated. Do not blindly retry it: record NEEDS_RECONNECT and enqueue one

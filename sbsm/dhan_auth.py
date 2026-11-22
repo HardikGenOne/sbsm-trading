@@ -15,7 +15,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .models import BrokerCredential
+from .models import BrokerCredential, NotificationState
 from .notifications import enqueue, ist_stamp
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -203,12 +203,44 @@ class DhanTokenManager:
         if response.status_code != 200:
             self._fail(row.generation, "RENEWING", "RENEWAL_REJECTED" if response.status_code < 500 else "RENEWAL_DELIVERY_UNCERTAIN")
             return
+        # Preserve the complete broker response encrypted BEFORE interpreting it.
+        # If Dhan changes its response shape, the only replacement is recoverable.
+        recovery = {"generation": row.generation, "received_ms": now,
+                    "http_status": response.status_code,
+                    "ciphertext": self.cipher.encrypt(response.content).decode()}
+        for attempt in range(3):
+            try:
+                with Session(self.db.engine) as s, s.begin():
+                    s.merge(NotificationState(key="dhan_renewal_recovery", value=recovery))
+                break
+            except Exception:
+                if attempt == 2:
+                    raise RuntimeError("Dhan renewal recovery persistence failed") from None
+                time.sleep(0.2)
         try:
             payload = response.json()
-            replacement = payload["accessToken"]
-            if (not isinstance(replacement, str) or len(replacement) < 20 or replacement == token
-                    or str(payload.get("dhanClientId", client_id)) != client_id):
-                raise ValueError("Invalid renewal")
+            # The documented form is top-level accessToken. Accept common
+            # envelope/name variants only provisionally: /profile must verify
+            # the candidate's account and expiry before any quote uses it.
+            roots = [payload]
+            if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+                roots.append(payload["data"])
+            replacement = None
+            for item in roots:
+                if not isinstance(item, dict):
+                    continue
+                account = item.get("dhanClientId")
+                if account is not None and str(account) != client_id:
+                    continue
+                for name in ("accessToken", "access_token", "token"):
+                    candidate = item.get(name)
+                    if isinstance(candidate, str) and len(candidate) >= 20 and candidate != token:
+                        replacement = candidate
+                        break
+                if replacement:
+                    break
+            if not replacement:
+                raise ValueError("No replacement token")
         except (ValueError, KeyError, TypeError):
             self._fail(row.generation, "RENEWING", "INVALID_RENEWAL_RESPONSE")
             return
