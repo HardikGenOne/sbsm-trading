@@ -42,3 +42,35 @@ All 20 existing stock alert destinations were saved to the new receiver. The old
 On 23 November 2026 the existing SBSM candle-close job was saved with the additional
 09:05–09:16 IST weekday window (03:35–03:46 UTC). This supports next-session order
 resumption at 09:15 without changing the other windows. Save confirmation was observed.
+
+
+## Dhan automatic renewal — 23 November 2026 checkpoint
+
+Backend commits `aa303ca` and `2efd605` are deployed on the existing free Render
+service. Dhan credentials are encrypted in a dedicated SQL table; the encryption
+key is a Render secret with an ignored local backup. The receiver role was
+verified to have no read/update access to credentials or read access to encrypted
+recovery records. Paper balances, reserves, realized P&L and position/order/fill/
+ledger counts were unchanged across deployment and the live authentication test.
+
+A separate enabled cron-job.org job, “SBSM Dhan renewal wake-up (every 6h)”, calls
+the public Vercel `/ping` at 00:05, 06:05, 12:05 and 18:05 IST on all seven days.
+Existing market warm-ups remain. The public ping and Render liveness returned
+200 after deployment. This reduces idle-expiry risk; it is not an uptime guarantee.
+
+**Live renewal is not yet verified.** Initial profile verification succeeded,
+but the first live RenewToken response failed validation. A subsequent profile
+call returned HTTP 400 / DH-906. The initial response was not retained for
+recovery. The follow-up fix now encrypts and durably stores successful renewal
+responses before interpretation and supports provisional response variants,
+which still require a valid matching-account profile before use.
+
+The worker records NEEDS_RECONNECT; its Telegram warning was sent. The user was
+asked to generate a fresh token in Dhan Web, update SBSM_DHAN_ACCESS_TOKEN in
+Render and redeploy. Do not retry the invalidated token or replay past expired
+entries. Keep the existing nightly Codex reminders until a real replacement is
+verified in Dhan, the worker, and dashboard; only then remove that automation.
+
+Validation: 148 local tests passed. All nine isolated Postgres scenarios passed
+across runs after rerunning a transient dropped-connection failure; the two Dhan
+Postgres checks were repeated successfully after the response-recovery fix.
