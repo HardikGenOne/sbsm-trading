@@ -2,6 +2,7 @@
 from sqlalchemy import func, select
 
 from .market import feed_configured
+from .dhan_auth import effective_settings, health as dhan_auth_health
 from .models import Event, Quote, NotificationState, Order
 
 
@@ -22,7 +23,11 @@ def report(engine):
         last_quote = session.scalar(select(Quote).where(
             Quote.source == provider, Quote.observed_ms >= selected_ms,
         ).order_by(Quote.asof_ms.desc()).limit(1))
-    providers = {name: feed_configured(settings, name) for name in ("kite", "dhan")}
+    runtime_settings = effective_settings(settings, engine.db)
+    providers = {name: feed_configured(runtime_settings, name) for name in ("kite", "dhan")}
+    auth = dhan_auth_health(settings, engine.db, now)
+    if provider == "dhan" and auth["enabled"]:
+        add("dhan_token_renewal", auth["status"], auth["message"])
     if provider == "manual":
         add("feed", "BLOCKED", "Manual quotes are synthetic. Select Kite or Dhan for live-data paper trading.")
     elif not providers[provider]:
@@ -65,6 +70,7 @@ def report(engine):
         "feed_mode": provider,
         "providers": providers,
         "dhan_startup": startup,
+        "dhan_token_renewal": auth,
         "ready_for_new_entries": all(check["status"] == "PASS" for check in checks),
         "checks": checks,
         "pending_signals": pending,

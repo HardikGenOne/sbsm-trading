@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     kite_access_token: SecretStr = SecretStr("")
     dhan_client_id: SecretStr = SecretStr("")
     dhan_access_token: SecretStr = SecretStr("")
+    dhan_auto_renew: bool = False
+    broker_token_key: SecretStr = SecretStr("")
+    dhan_renew_before_hours: int = Field(8, ge=4, le=12)
     initial_capital_paise: int = Field(50_000_000, gt=0)
     allocation_bps: int = Field(1200, gt=0, le=10000)
     approved_config: str = "lb=3;gap=0.16;noise=25;atr=25;factor=4;wma=30"
@@ -69,6 +72,12 @@ class Settings(BaseSettings):
         a, b = self.admin_token.get_secret_value(), self.webhook_token.get_secret_value()
         if min(len(a), len(b)) < 32 or a == b or a.startswith("replace-") or b.startswith("replace-"):
             raise ValueError("Set distinct random admin/webhook tokens, each at least 32 characters")
+        if self.dhan_auto_renew:
+            from cryptography.fernet import Fernet
+            try:
+                Fernet(self.broker_token_key.get_secret_value().encode())
+            except (ValueError, TypeError):
+                raise ValueError("Automatic renewal requires a valid broker_token_key encryption key") from None
         if self.telegram_enabled:
             token = self.telegram_bot_token.get_secret_value()
             chat = self.telegram_chat_id.get_secret_value()

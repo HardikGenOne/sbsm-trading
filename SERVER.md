@@ -297,3 +297,45 @@ Free Render must be woken before the next open for timely processing. Add weekda
 09:05–09:16 IST every-minute GET /ping checks alongside the existing candle-close
 windows; a warm-up is best effort, never an always-on guarantee. /ping belongs to
 Vercel and wakes the Render worker; merely keeping a static dashboard open does not.
+
+
+## Automatic Dhan web-token renewal
+
+Dhan API keys do not replace access tokens. Enable `SBSM_DHAN_AUTO_RENEW=true`
+and set `SBSM_BROKER_TOKEN_KEY` to a securely generated Fernet key in Render's
+secret environment. Seed with an active token generated from Dhan Web, using
+`SBSM_DHAN_CLIENT_ID` and `SBSM_DHAN_ACCESS_TOKEN`. No PIN, password, OTP or TOTP
+seed is stored. `/v2/profile` verifies account identity and expiry. Renewal uses
+Dhan's official `GET /v2/RenewToken` and its `dhanClientId` header.
+
+The worker checks once a minute while running and renews when at most eight
+hours remain. A separate free cron-job.org job wakes `/ping` every six hours,
+every day including weekends (00:05, 06:05, 12:05, 18:05 IST; cron timezone UTC,
+`35 0,6,12,18 * * *`). Existing market/session wake-ups remain unchanged.
+The worker must run before expiry; an expired or revoked token requires one
+manual reconnect. Free hosting, network and broker outages can still interrupt
+renewal. Dhan permits renewal only for active web-generated tokens.
+
+Tokens are Fernet-encrypted in the additive `broker_credentials` SQL table.
+API and worker reload the shared token, so replacements need no redeploy.
+Only nonsecret expiry, generation and renewal status appear in System health.
+Keep the encryption key stable and privately backed up: losing it requires a
+fresh token and a controlled credential-store reset. Never expose the table
+through generic dashboard rows or grant the restricted webhook receiver access.
+No financial table, fund allocation, fill rule or exit rule is changed.
+
+A committed compare-and-swap lease prevents concurrent renewal requests.
+Network calls hold no account or token-row lock. Save the returned replacement
+before profile verification; transient profile errors retry without re-renewing.
+A timeout, invalid response or abandoned renewal may mean the old token was
+invalidated. Do not blindly retry it: record NEEDS_RECONNECT and enqueue one
+safe Telegram warning. Rate-limit responses back off five minutes.
+
+To reconnect, generate a fresh Dhan Web token, update the Render seed token and
+redeploy. The manager verifies a changed seed before replacing its stored token;
+an unchanged seed never overwrites a rotated token. Do not simply disable renewal
+and restart with the old seed: it may have been invalidated. To roll back, first
+set a fresh active seed or securely transfer the current stored token to Render.
+The nightly Codex reminders should be removed only after a real renewal and
+shared-token verification succeed. Trading fills still require a fresh usable
+market quote; successful token renewal alone does not establish fill readiness.

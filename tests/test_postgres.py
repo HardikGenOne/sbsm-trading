@@ -56,3 +56,13 @@ def postgres_system():
 ])
 def test_same_accounting_scenarios_on_postgres(postgres_system, scenario):
     scenario(postgres_system)
+
+
+def test_dhan_rotation_isolated_postgres(postgres_system):
+    from test_dhan_auth import test_encrypted_rotation_is_shared_restart_safe_and_does_not_change_ledger
+    test_encrypted_rotation_is_shared_restart_safe_and_does_not_change_ledger(postgres_system)
+
+
+def test_dhan_lease_isolated_postgres(postgres_system):
+    from test_dhan_auth import test_second_worker_cannot_renew_while_first_is_in_flight
+    test_second_worker_cannot_renew_while_first_is_in_flight(postgres_system)

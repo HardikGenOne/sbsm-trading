@@ -7,7 +7,8 @@ from sqlalchemy import select
 from .config import Settings, SYMBOLS
 from .database import Database
 from .engine import PaperEngine, now_ms
-from .market import MarketCalendar, quote_feed
+from .market import MarketCalendar, quote_feed, feed_configured
+from .dhan_auth import DhanTokenManager, effective_settings, fingerprint
 from .models import Audit
 from .notifications import enqueue
 from .receiver import drain_inbox
@@ -24,7 +25,8 @@ def main():
     db.initialize(settings.initial_capital_paise, now_ms())
     calendar = MarketCalendar(settings.closed_dates, settings.cas_symbols)
     engine = PaperEngine(db, settings, calendar)
-    provider, feed = None, None
+    provider, feed, feed_identity = None, None, None
+    token_manager = DhanTokenManager(db, settings, now_ms)
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -37,13 +39,17 @@ def main():
     try:
         while not stop.is_set():
             try:
+                token_manager.tick()
+                runtime_settings = effective_settings(settings, db)
                 with db.read() as s:
                     selection = engine.active_feed(s)
-                if provider != selection[0]:
+                identity = (selection[0], fingerprint(runtime_settings.dhan_access_token.get_secret_value()) if selection[0] == "dhan" else "")
+                if feed_identity != identity:
                     if feed is not None:
                         feed.close()
-                    provider, feed = selection[0], quote_feed(settings, selection[0])
-                    if provider == 'dhan':
+                    provider, feed_identity = selection[0], identity
+                    feed = quote_feed(runtime_settings, provider) if feed_configured(runtime_settings, provider) else None
+                    if provider == 'dhan' and feed is not None:
                         warmup_pending = not warm_dhan(engine, feed, selection)
                 # Every Dhan worker startup/switch attempts the bounded read-only
                 # warm-up before admitting receipts. Failed tests never drop them.
@@ -85,6 +91,7 @@ def main():
     finally:
         if feed is not None:
             feed.close()
+        token_manager.close()
         db.engine.dispose()
 
 

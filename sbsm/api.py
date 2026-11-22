@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import OperationalError
 
+from .dhan_auth import effective_settings
 from .config import Settings, SYMBOLS
 from .database import Database
 from .engine import PaperEngine, RateLimited, SignalConflict, now_ms
@@ -202,7 +203,7 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
 
     @app.post("/controls/market-data", dependencies=[Depends(admin)])
     def select_market_data(selection: FeedSelection):
-        if not feed_configured(settings, selection.provider):
+        if not feed_configured(effective_settings(settings, db), selection.provider):
             raise HTTPException(409, "Configure this provider’s credentials on the server first")
         engine.select_feed(selection.provider)
         return {"feed_mode": selection.provider}
@@ -214,9 +215,10 @@ def create_app(settings=None, database=None, calendar=None, clock=now_ms):
             symbol = "BAJAJ_AUTO"
         if symbol not in SYMBOLS:
             raise HTTPException(422, "Enter an NSE stock from the SBSM watchlist")
-        if not feed_configured(settings, provider):
+        runtime_settings = effective_settings(settings, db)
+        if not feed_configured(runtime_settings, provider):
             raise HTTPException(409, "This provider’s credentials are missing")
-        feed = quote_feed(settings, provider)
+        feed = quote_feed(runtime_settings, provider)
         try:
             quotes = feed.fetch([symbol])
         except httpx.HTTPStatusError as exc:

@@ -179,3 +179,19 @@ class WebhookReceipt(Base):
     payload: Mapped[dict] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(20), index=True)
     result: Mapped[dict] = mapped_column(JSON)
+
+
+class BrokerCredential(Base):
+    """Encrypted token and renewal lease; never exposed through generic row APIs."""
+    __tablename__ = "broker_credentials"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    encrypted_token: Mapped[str] = mapped_column(Text)
+    seed_fingerprint: Mapped[str] = mapped_column(String(64))
+    client_fingerprint: Mapped[str] = mapped_column(String(64))
+    generation: Mapped[int] = mapped_column(Integer)
+    expires_ms: Mapped[int] = mapped_column(BigInteger)
+    renewed_ms: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(24))
+    lease_until_ms: Mapped[int] = mapped_column(BigInteger)
+    next_attempt_ms: Mapped[int] = mapped_column(BigInteger)
+    reason: Mapped[str] = mapped_column(String(64))
