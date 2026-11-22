@@ -64,3 +64,16 @@ test('repeated throttling stops after bounded retries and re-enables controls',a
   assert.equal(ctx.elements['market-test'].disabled,false);
   assert.equal(ctx.snapshot().result,'rate limited');
 });
+
+test('waiting signals display their next session without changing the stored outcome',()=>{
+  const helpers=source.slice(source.indexOf('function signalOutcome'),source.indexOf('function stock'));
+  const ctx={human:v=>String(v??'—'),date:v=>'IST:'+v};
+  vm.createContext(ctx);
+  vm.runInContext(helpers,ctx);
+  const signal={status:'ACCEPTED',reason:'WAITING_NEXT_SESSION',decision:{wait_until_ms:12345}};
+  assert.equal(ctx.signalOutcome(signal),'WAITING_SESSION');
+  assert.match(ctx.signalReason(signal),/Waiting for next session.*IST:12345/);
+  assert.equal(signal.status,'ACCEPTED');
+  assert.equal(ctx.signalOutcome({status:'EXPIRED',reason:'ENTRY_EXPIRED'}),'EXPIRED');
+  assert.equal(ctx.signalOutcome({status:'FILLED',reason:null}),'FILLED');
+});
