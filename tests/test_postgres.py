@@ -13,6 +13,7 @@ from sbsm.database import Database
 from sbsm.engine import PaperEngine
 from conftest import Calendar, Clock
 import test_engine as scenarios
+import test_session_wait as sessions
 
 pytestmark = pytest.mark.skipif(os.environ.get("SBSM_TEST_POSTGRES") != "1", reason="Explicit cloud SQL integration check not requested")
 
@@ -50,6 +51,8 @@ def postgres_system():
     scenarios.test_duplicate_and_conflicting_delivery,
     scenarios.test_roundtrip_net_pnl_and_dynamic_allocation,
     scenarios.test_restart_recovers_pending_and_never_replays_skips,
+    sessions.test_closing_entry_reserves_waits_survives_restart_and_requires_open_quote,
+    sessions.test_partial_entry_exit_cancels_reserved_remainder_and_waits_overnight,
 ])
 def test_same_accounting_scenarios_on_postgres(postgres_system, scenario):
     scenario(postgres_system)

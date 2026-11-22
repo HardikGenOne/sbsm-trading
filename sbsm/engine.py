@@ -10,7 +10,7 @@ from sqlalchemy.orm import object_session
 
 from .models import Account, Audit, Conflict, Event, FeedPreference, Fill, Ledger, Order, Position, Quote, Settlement
 from .schemas import QuoteInput, Signal
-from .notifications import enqueue, rupees
+from .notifications import enqueue, rupees, ist_stamp
 
 ACTIVE = ("PENDING", "PARTIALLY_FILLED")
 
@@ -167,26 +167,32 @@ class PaperEngine:
         if existing:
             self.skip(event, "EXIT_ALREADY_PENDING", order_id=existing.id)
             return
-        order = Order(signal_id=event.id, cycle_id=event.cycle_id, symbol=event.symbol, side="SELL", status="PENDING", created_ms=now, eligible_ms=now + self.settings.execution_latency_ms, expires_ms=None, budget=0, reserved_left=0, reference_paise=paise(event.payload["reference_price"]), quantity=position.quantity, filled_quantity=0)
+        order = Order(signal_id=event.id, cycle_id=event.cycle_id, symbol=event.symbol, side="SELL", status="PENDING", created_ms=now, eligible_ms=self.calendar.next_continuous_open(event.symbol, now) + self.settings.execution_latency_ms, expires_ms=None, budget=0, reserved_left=0, reference_paise=paise(event.payload["reference_price"]), quantity=position.quantity, filled_quantity=0)
         s.add(order)
         event.status = "ACCEPTED"
         event.decision = {"quantity": position.quantity}
-        enqueue(s, self.settings, f"signal:{event.id}:exit", "EXIT QUEUED", [event.symbol, f"Quantity: {position.quantity} shares", "Waiting for an open market and a fresh quote.", f"Signal #{event.id}"], now)
+        waiting = self.session_wait(s, order, event, now, notify=False)
+        lines = [event.symbol, f"Quantity: {position.quantity} shares", "Waiting for an open continuous session and a fresh quote.", f"Signal #{event.id}"]
+        if waiting:
+            lines.append(f"Next session: {ist_stamp(event.decision['wait_until_ms'])}")
+        enqueue(s, self.settings, f"signal:{event.id}:exit", "EXIT WAITING FOR SESSION" if waiting else "EXIT QUEUED", lines, now)
 
-    def entry_intent(self, s, a, event, now, market_open):
+    def entry_intent(self, s, a, event, now):
         pool = a.initial + a.realized
         budget = max(0, pool * self.settings.allocation_bps // 10000)
         available = a.cash - a.reserved - a.unsettled
         details = {"pool_paise": pool, "required_paise": budget, "available_paise": available, "reference_price": event.payload["reference_price"]}
+        start = self.calendar.next_continuous_open(event.symbol, event.received_ms)
+        deadline = self.calendar.entry_deadline(event.symbol, start, self.settings.entry_ttl_seconds * 1000)
         reason = None
-        if now - event.payload["signal_bar_close_ms"] > self.settings.signal_max_age_seconds * 1000 or now >= event.received_ms + self.settings.entry_ttl_seconds * 1000:
+        # A fresh receipt may wait overnight; a late old alert or an elapsed
+        # execution window is still stale. Worker restarts never reset this clock.
+        if event.received_ms - event.payload["signal_bar_close_ms"] > self.settings.signal_max_age_seconds * 1000 or now >= deadline:
             reason = "STALE_ENTRY"
         elif a.paused:
             reason = "ENTRIES_PAUSED"
         elif a.reconciliation_required:
             reason = "RECONCILIATION_REQUIRED"
-        elif not market_open:
-            reason = "MARKET_CLOSED"
         elif s.scalar(select(Position).where(Position.symbol == event.symbol, Position.quantity > 0)) or s.scalar(select(Order).where(Order.symbol == event.symbol, Order.side == "BUY", Order.status.in_(ACTIVE))):
             reason = "POSITION_OR_ENTRY_EXISTS"
         elif s.scalar(select(Order).where(Order.cycle_id == event.cycle_id)) or s.scalar(select(Event).where(Event.cycle_id == event.cycle_id, Event.action == "EXIT_LONG")):
@@ -196,19 +202,45 @@ class PaperEngine:
         if reason:
             self.skip(event, reason, **details)
             return
-        order = Order(signal_id=event.id, cycle_id=event.cycle_id, symbol=event.symbol, side="BUY", status="PENDING", created_ms=now, eligible_ms=max(now, event.received_ms + self.settings.execution_latency_ms), expires_ms=event.received_ms + self.settings.entry_ttl_seconds * 1000, budget=budget, reserved_left=budget, reference_paise=paise(event.payload["reference_price"]), quantity=0, filled_quantity=0)
+        order = Order(signal_id=event.id, cycle_id=event.cycle_id, symbol=event.symbol, side="BUY", status="PENDING", created_ms=now, eligible_ms=max(now, start + self.settings.execution_latency_ms), expires_ms=deadline, budget=budget, reserved_left=budget, reference_paise=paise(event.payload["reference_price"]), quantity=0, filled_quantity=0)
         s.add(order)
         s.flush()
         self.record(s, a, "RESERVE", now, order.id, reserve=budget)
         event.status = "ACCEPTED"
         event.decision = details
-        enqueue(s, self.settings, f"signal:{event.id}:accepted", "ENTRY ACCEPTED", [event.symbol, f"Budget reserved: {rupees(budget)}", f"Fund pool: {rupees(pool)}", f"Available after reserve: {rupees(available - budget)}", f"Signal #{event.id}"], now)
+        waiting = self.session_wait(s, order, event, now, notify=False)
+        lines = [event.symbol, f"Budget reserved: {rupees(budget)}", f"Fund pool: {rupees(pool)}", f"Available after reserve: {rupees(available - budget)}", f"Signal #{event.id}"]
+        if waiting:
+            lines.append(f"Next session: {ist_stamp(event.decision['wait_until_ms'])}. Funds remain reserved.")
+        enqueue(s, self.settings, f"signal:{event.id}:accepted", "ENTRY WAITING FOR SESSION" if waiting else "ENTRY ACCEPTED", lines, now)
+
+    def session_wait(self, s, order, event, now, notify=True):
+        if self.calendar.is_continuous_open(order.symbol, now):
+            if order.reason == "WAITING_NEXT_SESSION":
+                order.reason = None
+                event.reason = None
+                event.decision = {k: v for k, v in event.decision.items() if k != "wait_until_ms"}
+                if notify:
+                    enqueue(s, self.settings, f"order:{order.id}:resumed:{order.eligible_ms}",
+                            "SESSION OPEN · ORDER RESUMED", [order.symbol, f"Order #{order.id}", "Waiting for a fresh continuous-session quote; price and depth checks remain active."], now)
+            return False
+        next_open = self.calendar.next_continuous_open(order.symbol, now)
+        order.eligible_ms = max(order.eligible_ms, next_open + self.settings.execution_latency_ms)
+        if order.reason != "WAITING_NEXT_SESSION":
+            order.reason = event.reason = "WAITING_NEXT_SESSION"
+            event.decision = dict(event.decision, wait_until_ms=next_open)
+            if notify:
+                enqueue(s, self.settings, f"order:{order.id}:waiting:{next_open}",
+                        "ORDER WAITING FOR SESSION", [order.symbol, f"Order #{order.id}", f"Continuous trading closed. Next session: {ist_stamp(next_open)}."], now)
+        return True
 
     def fresh_quote(self, s, order, now, selection):
         provider, selected_ms = selection
         q = s.scalar(select(Quote).where(Quote.symbol == order.symbol, Quote.source == provider, Quote.observed_ms >= selected_ms).order_by(Quote.asof_ms.desc(), Quote.observed_ms.desc()).limit(1))
         if not q or q.id == order.last_quote_id:
             return None
+        if not self.calendar.is_continuous_open(order.symbol, q.asof_ms):
+            return None  # Auction/pre-open quotes cannot stand in for CTS liquidity.
         if not 0 <= now - q.asof_ms <= self.settings.quote_max_age_seconds * 1000:
             return None
         if q.observed_ms < order.eligible_ms or now < order.eligible_ms:
@@ -218,6 +250,8 @@ class PaperEngine:
     def fill_order(self, s, a, order, now, selection):
         if order.expires_ms is not None and now >= order.expires_ms:
             self.cancel(s, a, order, now, "ENTRY_EXPIRED")
+            return
+        if self.session_wait(s, order, s.get(Event, order.signal_id), now):
             return
         q = self.fresh_quote(s, order, now, selection)
         if not q:
@@ -309,7 +343,7 @@ class PaperEngine:
 
     def step(self):
         now = self.clock()
-        market_open = self.calendar.is_open(now)
+        self.calendar.is_open(now)  # Validate reviewed calendar coverage before accounting.
         with self.db.write() as (s, a):
             selection = self.active_feed(s)
             a.worker_heartbeat_ms = now
@@ -321,18 +355,14 @@ class PaperEngine:
             for event in s.scalars(select(Event).where(Event.status == "QUEUED", Event.action == "EXIT_LONG").order_by(Event.id)).all():
                 self.exit_intent(s, a, event, now)
                 s.flush()
-            if market_open:
-                for order in s.scalars(select(Order).where(Order.side == "SELL", Order.status.in_(ACTIVE)).order_by(Order.id)).all():
-                    self.fill_order(s, a, order, now, selection)
-                    s.flush()
+            for order in s.scalars(select(Order).where(Order.side == "SELL", Order.status.in_(ACTIVE)).order_by(Order.id)).all():
+                self.fill_order(s, a, order, now, selection)
+                s.flush()
             for event in s.scalars(select(Event).where(Event.status == "QUEUED", Event.action == "ENTER_LONG").order_by(Event.id)).all():
-                self.entry_intent(s, a, event, now, market_open)
+                self.entry_intent(s, a, event, now)
                 s.flush()
             for order in s.scalars(select(Order).where(Order.side == "BUY", Order.status.in_(ACTIVE)).order_by(Order.id)).all():
-                if market_open:
-                    self.fill_order(s, a, order, now, selection)
-                elif now >= order.expires_ms:
-                    self.cancel(s, a, order, now, "ENTRY_EXPIRED")
+                self.fill_order(s, a, order, now, selection)
                 s.flush()
             # Conservation checks catch double spending, missing reservations, and bad P&L.
             costs = s.scalar(select(func.coalesce(func.sum(Position.cost), 0)))

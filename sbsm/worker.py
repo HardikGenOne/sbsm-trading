@@ -22,7 +22,7 @@ def main():
     settings = Settings()
     db = Database(settings.database_url)
     db.initialize(settings.initial_capital_paise, now_ms())
-    calendar = MarketCalendar(settings.closed_dates)
+    calendar = MarketCalendar(settings.closed_dates, settings.cas_symbols)
     engine = PaperEngine(db, settings, calendar)
     provider, feed = None, None
     stop = threading.Event()

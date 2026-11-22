@@ -7,7 +7,7 @@ The cloud paper account starts with ₹5,00,000 and sizes each new entry at 12% 
 
 Telegram is configured on the hosted server for the user's verified private chat with **@Trading_signal_alerts_bot**. Its token and chat ID are stored in private configuration, never in this guide or Git. A hosted connection test was confirmed SENT on 4 November 2026, on its first attempt. Check System health for subsequent delivery status. Telegram is for notifications; it does not accept trading commands.
 
-Broker market-data access is still deferred. Signals can be received and recorded, but simulated fills require genuine fresh quotes: the TradingView candle/reference price is never substituted. A BUY notification saying **ENTRY ACCEPTED** means a budget was reserved, not that shares filled. With no quotes, an accepted entry normally expires after 60 seconds and releases its reservation. Unfilled exits remain pending until eligible quotes and an open market are available.
+Broker market-data access is still deferred. Signals can be received and recorded, but simulated fills require genuine fresh quotes: the TradingView candle/reference price is never substituted. A BUY notification saying **ENTRY ACCEPTED** means a budget was reserved, not that shares filled. With no quotes, an accepted entry expires after 60 seconds of continuous-trading time and releases its reservation. Closing-time entries and exits show **Waiting session** until the next eligible continuous session; BUY funds stay reserved. The clock pauses while closed, and price protection still applies at the next open. Previously expired/skipped entries are not replayed. Unfilled exits retain priority until eligible quotes and an open continuous session are available.
 
 ## 1. Prepare TradingView
 

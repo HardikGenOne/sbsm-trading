@@ -32,7 +32,7 @@ from .ingress import client_ip
 def create_app(settings=None, database=None, calendar=None, clock=now_ms):
     settings = settings or Settings()
     db = database or Database(settings.database_url)
-    engine = PaperEngine(db, settings, calendar or MarketCalendar(settings.closed_dates), clock)
+    engine = PaperEngine(db, settings, calendar or MarketCalendar(settings.closed_dates, settings.cas_symbols), clock)
 
     @asynccontextmanager
     async def lifespan(app):

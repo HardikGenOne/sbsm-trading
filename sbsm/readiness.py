@@ -2,7 +2,7 @@
 from sqlalchemy import func, select
 
 from .market import feed_configured
-from .models import Event, Quote, NotificationState
+from .models import Event, Quote, NotificationState, Order
 
 
 def report(engine):
@@ -49,6 +49,10 @@ def report(engine):
     with engine.db.read() as session:
         pending = session.scalar(select(func.count()).select_from(Event).where(Event.status == "QUEUED"))
         oldest = session.scalar(select(func.min(Event.received_ms)).where(Event.status == "QUEUED"))
+        waiting = session.scalar(select(func.count()).select_from(Order).where(
+            Order.status.in_(("PENDING", "PARTIALLY_FILLED")), Order.reason == "WAITING_NEXT_SESSION"))
+    if waiting:
+        add("session_wait", "WAITING", f"{waiting} order(s) saved for the next continuous session. Entry funds remain reserved; exits retain priority.")
     fresh = bool(last_quote and 0 <= now - last_quote.asof_ms <= settings.quote_max_age_seconds * 1000)
     quote_status = "PASS" if fresh else ("BLOCKED" if market_open else "WAITING")
     add("quotes", quote_status, "A recent market snapshot is available." if fresh else "No fresh snapshot yet. No candle-price fallback or fabricated fills will be used.")
@@ -64,6 +68,7 @@ def report(engine):
         "ready_for_new_entries": all(check["status"] == "PASS" for check in checks),
         "checks": checks,
         "pending_signals": pending,
+        "waiting_session_orders": waiting,
         "oldest_queued_age_ms": queue_age,
         "latest_quote_ms": last_quote.asof_ms if last_quote else None,
         "market_open": market_open,

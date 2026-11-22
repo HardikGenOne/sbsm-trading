@@ -167,7 +167,7 @@ def test_restart_recovers_pending_and_never_replays_skips(system):
     new_db.engine.dispose()
 
 
-def test_closed_market_entries_skipped_exits_retained_overnight(system):
+def test_closed_market_entries_and_exits_retained_overnight(system):
     engine, clock, calendar = system
     entry = enter(engine, clock)
     calendar.opened = False
@@ -175,9 +175,9 @@ def test_closed_market_entries_skipped_exits_retained_overnight(system):
     engine.ingest(make_signal(engine, action="EXIT_LONG", cycle=entry.trade_cycle_id))
     engine.ingest(make_signal(engine, symbol="SBIN"))
     engine.step()
-    assert all_rows(engine, Event)[-1].reason == "MARKET_CLOSED"
-    assert all_rows(engine, Order)[-1].side == "SELL"
-    assert all_rows(engine, Order)[-1].status == "PENDING"
+    assert all_rows(engine, Event)[-1].reason == "WAITING_NEXT_SESSION"
+    assert [o.side for o in all_rows(engine, Order)[-2:]] == ["SELL", "BUY"]
+    assert all(o.status == "PENDING" for o in all_rows(engine, Order)[-2:])
     clock.advance(86_400_000)
     calendar.opened = True
     tick(engine)

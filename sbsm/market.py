@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -8,12 +8,18 @@ import pandas_market_calendars as calendars
 from .schemas import QuoteInput
 
 IST = ZoneInfo("Asia/Kolkata")
+# Reviewed against NSE CAS data dated 20-Nov-2026. This is an explicit cash
+# universe snapshot, not a dynamic assumption that every stock has derivatives.
+CAS_SYMBOLS = frozenset("POLYCAB ADANIENT APLAPOLLO BAJAJ_AUTO BEL BHEL BSE CANBK CONCOR EICHERMOT FORTIS ICICIBANK LAURUSLABS MCX NTPC SBIN ZYDUSLIFE".split())
+CAS_SOURCE = "https://www.nseindia.in/historical-data/cas"
+
 
 
 class MarketCalendar:
-    def __init__(self, closed_dates=()):
+    def __init__(self, closed_dates=(), cas_symbols=CAS_SYMBOLS):
         self.calendar = calendars.get_calendar("NSE")
         self.closed_dates = set(closed_dates)
+        self.cas_symbols = frozenset(cas_symbols)
 
     @lru_cache(maxsize=400)
     def session(self, date_string):
@@ -33,6 +39,49 @@ class MarketCalendar:
         date = datetime.fromtimestamp(now / 1000, IST).date().isoformat()
         session = self.session(date)
         return bool(session and session[0] <= now < session[1])
+
+    @lru_cache(maxsize=8000)
+    def continuous_session(self, symbol, date_string):
+        session = self.session(date_string)
+        if not session:
+            return None
+        opened, closed = session
+        # CAS 1.0 cuts continuous trading at 15:15 only on regular sessions.
+        # CAS 2.0 restores 15:30 CTS on 07-Dec-2026. Special sessions retain
+        # their calendar schedule; never apply a wall-clock 15:15 to Muhurat.
+        regular = (datetime.fromtimestamp(opened / 1000, IST).time() == time(9, 15)
+                   and datetime.fromtimestamp(closed / 1000, IST).time() == time(15, 30))
+        if regular and symbol in self.cas_symbols and "2026-08-03" <= date_string < "2026-12-07":
+            closed = int(datetime.fromisoformat(date_string).replace(hour=15, minute=15, tzinfo=IST).timestamp() * 1000)
+        return opened, closed
+
+    def is_continuous_open(self, symbol, now):
+        day = datetime.fromtimestamp(now / 1000, IST).date().isoformat()
+        session = self.continuous_session(symbol, day)
+        return bool(session and session[0] <= now < session[1])
+
+    def next_continuous_open(self, symbol, now):
+        day = datetime.fromtimestamp(now / 1000, IST).date()
+        for offset in range(32):
+            session = self.continuous_session(symbol, (day + timedelta(days=offset)).isoformat())
+            if session and now < session[1]:
+                return max(now, session[0])
+        raise RuntimeError("No continuous session found; calendar needs review")
+
+    def entry_deadline(self, symbol, start, duration_ms):
+        # Consume only tradable milliseconds. A partly-used window pauses at
+        # the close and resumes with its remaining time at the next open.
+        remaining, cursor = duration_ms, start
+        for _ in range(32):
+            cursor = self.next_continuous_open(symbol, cursor)
+            day = datetime.fromtimestamp(cursor / 1000, IST).date().isoformat()
+            _, closed = self.continuous_session(symbol, day)
+            available = closed - cursor
+            if remaining <= available:
+                return cursor + remaining
+            remaining -= available
+            cursor = closed
+        raise RuntimeError("Entry window exceeds reviewed sessions")
 
     def next_session_open(self, now: int):
         date = datetime.fromtimestamp(now / 1000, IST).date()

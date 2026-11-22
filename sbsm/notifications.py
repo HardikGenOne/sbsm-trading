@@ -13,12 +13,16 @@ def rupees(value):
     return f"{sign}₹{abs(value) // 100:,}.{abs(value) % 100:02d}"
 
 
+def ist_stamp(value):
+    return datetime.fromtimestamp(value / 1000, ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y %H:%M:%S IST")
+
+
 def enqueue(session, settings, key, title, lines, now):
     if not settings.telegram_enabled:
         return
     if session.scalar(select(Notification.id).where(Notification.dedupe_key == key)):
         return
-    stamp = datetime.fromtimestamp(now / 1000, ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y %H:%M:%S IST")
+    stamp = ist_stamp(now)
     body = "\n".join([f"SBSM PAPER · {title}", *lines, f"Time: {stamp}", f"Ref: {key}"])
     if settings.public_base_url:
         body += "\n" + settings.public_base_url.rstrip("/")

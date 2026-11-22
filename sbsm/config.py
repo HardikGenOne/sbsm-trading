@@ -5,7 +5,7 @@ import re
 import ipaddress
 from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     settlement_mode: Literal["next_session", "immediate"] = "next_session"
     poll_seconds: float = Field(2, ge=0.1)
     closed_dates: list[str] = []
+    cas_symbols: list[str] = [s for s in SYMBOLS if s not in ("APARINDS", "HINDCOPPER", "M&MFIN")]
+
+    @field_validator("cas_symbols")
+    @classmethod
+    def approved_cas_symbols(cls, value):
+        if len(value) != len(set(value)) or not set(value).issubset(SYMBOLS):
+            raise ValueError("CAS symbols must be unique members of the approved equity universe")
+        return value
+
     session_seconds: int = Field(3600, ge=60, le=86400)
     session_cookie_secure: bool = False
     environment: Literal["local", "production"] = "local"

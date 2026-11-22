@@ -26,6 +26,15 @@ class Calendar:
     def is_open(self, now):
         return self.opened
 
+    def is_continuous_open(self, symbol, now):
+        return self.is_open(now)
+
+    def next_continuous_open(self, symbol, now):
+        return now if self.opened else self.next_session_open(now)
+
+    def entry_deadline(self, symbol, start, duration_ms):
+        return start + duration_ms
+
     def next_session_open(self, now):
         return now + 86_400_000
 

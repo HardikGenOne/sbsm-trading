@@ -251,3 +251,49 @@ Latest-quote lookups in readiness, valuation and paper fills apply SQL LIMIT 1
 with the existing provider/selection filters and timestamp ordering. Returning
 one quote must not transfer the full stored quote history to a free instance.
 This changes query cost, not which snapshot or trading rules are used.
+
+### Continuous-session waiting for entries and exits
+
+New BUY and matching SELL signals received after a stock's continuous session
+closes are retained for the next reviewed trading session. BUY admission still
+reserves 12% of the realized fund pool FIFO; unavailable funds still cause a
+permanent skip. Waiting orders use the existing active PENDING/PARTIALLY_FILLED
+states with reason WAITING_NEXT_SESSION, a scheduled eligibility time and a
+visible next-session time. Dashboard and Telegram distinguish waiting/resumption.
+SELL orders keep priority, have no entry expiry, and a matching exit cancels any
+unfilled BUY remainder before any further entry execution.
+
+Entry expiry counts 60 seconds of continuous trading from the durable receipt's
+next execution opportunity. A signal received during a closed session gets its
+full window at the next open. A window started just before the close pauses and
+resumes with only its remaining seconds. Restart/recovery never resets deadlines;
+late old alerts, previously expired/skipped entries and elapsed windows are not
+replayed. Freshness at receipt is still required. No historical production entry
+is recovered by this deployment. On a next-session price gap, the original
+reference price and existing price-protection cap still apply.
+
+Auction/pre-open timestamps and pre-eligibility cache snapshots cannot fill.
+Closing auction execution is not modeled. Broker outages do not extend a window
+once continuous trading resumes. No quotes or fills are invented.
+
+The default CAS eligibility snapshot is scoped to the approved 20 stocks and was
+reviewed against NSE CAS records dated 20-Nov-2026: all except APARINDS,
+HINDCOPPER and M&MFIN. SBSM_CAS_SYMBOLS can update this reviewed list without
+making exchange requests under a financial lock. Membership changes need review;
+this is not an automatic daily security-master integration.
+For regular NSE sessions from 03-Aug-2026 through 06-Dec-2026, these CAS stocks
+end continuous trading at 15:15 IST; non-CAS stocks at 15:30. From 07-Dec-2026,
+continuous trading ends at 15:30 for both under the published CAS 2.0 rules.
+Special-session dates/hours must be present correctly in the underlying calendar;
+the regular 15:15 override is never applied to an evening/special schedule.
+The existing reviewed calendar coverage still ends in 2026 and fails closed beyond it.
+
+Sources:
+- https://nsearchives.nseindia.com/web/pressrelease/2026-08/PR_cc_03082026_20260803232411.pdf
+- https://nsearchives.nseindia.com/web/mediaattachment/2026-11/FAQs_for_CM_and_FO_FOR_CAS_2.0_20261109152618.pdf
+- https://www.nseindia.in/historical-data/cas
+
+Free Render must be woken before the next open for timely processing. Add weekday
+09:05–09:16 IST every-minute GET /ping checks alongside the existing candle-close
+windows; a warm-up is best effort, never an always-on guarantee. /ping belongs to
+Vercel and wakes the Render worker; merely keeping a static dashboard open does not.

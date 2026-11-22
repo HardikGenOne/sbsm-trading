@@ -12,7 +12,7 @@ Local verification: 70 tests, plus five opt-in accounting integration cases agai
 
 ## Limitations and cutover
 
-Render Free can sleep, restart, or exhaust shared workspace allowances. Neon Free also has storage and compute allowances. cron-job.org runs GET https://sbsm-trading.vercel.app/ping every minute on weekdays in the 11:05–11:16, 13:05–13:16, 15:05–15:16 and 15:20–15:29 IST windows. Response history is enabled. There is no always-on guarantee. A sleeping service can miss TradingView's short delivery deadline. This is a cloud paper-testing setup; check readiness before enabling actual alerts. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
+Render Free can sleep, restart, or exhaust shared workspace allowances. Neon Free also has storage and compute allowances. cron-job.org runs GET https://sbsm-trading.vercel.app/ping every minute on weekdays in the 09:05–09:16, 11:05–11:16, 13:05–13:16, 15:05–15:16 and 15:20–15:29 IST windows. Response history is enabled. There is no always-on guarantee. A sleeping service can miss TradingView's short delivery deadline. This is a cloud paper-testing setup; check readiness before enabling actual alerts. [Render limits](https://render.com/docs/free), [Neon plans](https://neon.com/docs/introduction/plans).
 
 Broker access remains deferred. No candle-price fills or live broker orders are enabled. Telegram is enabled for the verified private chat; a connection test was delivered by the hosted outbox on 4 November 2026 (SENT, first attempt). Render-specific source verification uses its documented edge-overwritten CF-Connecting-IP header. A live forged-header probe was blocked at the edge; normal requests resolve through the configured mode. A genuine TradingView price alert verified Vercel receipt, worker processing and first-attempt Telegram delivery on 11 November 2026. This test did not create paper trades. Generic forwarded IP headers remain untrusted.
 
@@ -38,3 +38,7 @@ The Vercel `/receive/<private-token>` function inserts into Neon before returnin
 A saved test receipt was processed after the worker was deployed, proving recovery of an already persisted receipt. A separate genuine TradingView test then reported successful webhook delivery, with a matching processed receipt and Telegram SENT record. Stock alert URL migration is a separate operational step; do not assume all existing alerts use the new destination until each has been checked.
 
 All 20 existing stock alert destinations were saved to the new receiver. The older duplicate POLYCAB alert was stopped and the missing BSE alert created with the agreed 2H inputs (3, 0.16, 25, 25, 4, 30) and alert() calls only. All 20 intended symbols were observed active. The one-shot delivery test remains stopped, preserving its successful delivery log.
+
+On 23 November 2026 the existing SBSM candle-close job was saved with the additional
+09:05–09:16 IST weekday window (03:35–03:46 UTC). This supports next-session order
+resumption at 09:15 without changing the other windows. Save confirmation was observed.
