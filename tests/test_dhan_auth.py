@@ -290,3 +290,17 @@ def test_unknown_response_remains_encrypted_for_recovery(system):
         saved = s.get(NotificationState, "dhan_renewal_recovery").value
     assert NEW not in str(saved)
     assert NEW in Fernet(engine.settings.broker_token_key.get_secret_value().encode()).decrypt(saved["ciphertext"].encode()).decode()
+
+
+def test_observed_dhan_web_renewal_shape(system):
+    """Live Dhan returns token/createTime/expiryTime, unlike the docs sample."""
+    engine, clock, _ = system
+    response = {"token": NEW, "createTime": "2026-11-23T09:27:00", "expiryTime": "2026-11-24T09:27:00"}
+    manager, calls = setup_auth(system, lambda request: httpx.Response(200, json=response)
+                                if request.url.path.endswith("RenewToken") else None)
+    manager.tick()
+    manager.tick(force=True)
+    assert row(engine).generation == 2
+    assert row(engine).status == "READY"
+    assert effective_settings(engine.settings, engine.db).dhan_access_token.get_secret_value() == NEW
+    assert calls.count("/v2/RenewToken") == 1

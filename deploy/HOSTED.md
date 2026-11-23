@@ -58,19 +58,32 @@ the public Vercel `/ping` at 00:05, 06:05, 12:05 and 18:05 IST on all seven days
 Existing market warm-ups remain. The public ping and Render liveness returned
 200 after deployment. This reduces idle-expiry risk; it is not an uptime guarantee.
 
-**Live renewal is not yet verified.** Initial profile verification succeeded,
-but the first live RenewToken response failed validation. A subsequent profile
-call returned HTTP 400 / DH-906. The initial response was not retained for
-recovery. The follow-up fix now encrypts and durably stores successful renewal
-responses before interpretation and supports provisional response variants,
-which still require a valid matching-account profile before use.
+**Live renewal verified during the NSE session on 23 November 2026.** After
+manual reconnection, the initial token was verified and fresh worker quotes and
+all dashboard readiness checks passed. With no pending paper orders, one forced
+renewal returned HTTP 200. The real response contains `token`, `createTime` and
+`expiryTime`, rather than the documentation's `accessToken` field. The deployed
+response-variant support accepted it and retained the full response encrypted.
 
-The worker records NEEDS_RECONNECT; its Telegram warning was sent. The user was
-asked to generate a fresh token in Dhan Web, update SBSM_DHAN_ACCESS_TOKEN in
-Render and redeploy. Do not retry the invalidated token or replay past expired
-entries. Keep the existing nightly Codex reminders until a real replacement is
-verified in Dhan, the worker, and dashboard; only then remove that automation.
+The credential advanced from generation 2 to 3, with the replacement verified
+against `/v2/profile` and the configured account. Dhan reported expiry at
+24 November 2026 09:27 IST. Both the worker and the authenticated Vercel quote
+endpoint used the new stored token without a redeploy. The ICICIBANK quote test
+returned HTTP 200 with `fresh=true`; worker observations and heartbeat advanced
+past rotation, startup readiness was READY, and its Telegram notification was
+SENT. No synthetic strategy signal or test trade was generated.
 
-Validation: 148 local tests passed. All nine isolated Postgres scenarios passed
-across runs after rerunning a transient dropped-connection failure; the two Dhan
-Postgres checks were repeated successfully after the response-recovery fix.
+The initial failed live attempt is retained in history: its unrecognized response
+was not recoverable and required one manual reconnection. Response preservation
+and the actual Dhan `token` response shape are now covered by regression tests.
+The nightly manual token-update Codex automation was removed after successful
+verification. Durable failure/reconnect notifications remain enabled. The next
+scheduled automatic renewal still depends on the worker being awake before
+expiry; one successful forced test is not evidence of uninterrupted future
+renewals or guaranteed free-host uptime.
+
+Validation: all 149 standard local tests passed (nine opt-in Postgres tests
+were skipped in this standard run). This includes 20 Dhan auth tests, with a
+new regression case for the observed live response shape. All nine isolated Postgres scenarios had passed across runs after
+rerunning a transient dropped-connection failure; the two Dhan Postgres checks
+were repeated successfully after the response-recovery fix.

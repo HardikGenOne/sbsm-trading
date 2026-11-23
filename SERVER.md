@@ -306,7 +306,10 @@ and set `SBSM_BROKER_TOKEN_KEY` to a securely generated Fernet key in Render's
 secret environment. Seed with an active token generated from Dhan Web, using
 `SBSM_DHAN_CLIENT_ID` and `SBSM_DHAN_ACCESS_TOKEN`. No PIN, password, OTP or TOTP
 seed is stored. `/v2/profile` verifies account identity and expiry. Renewal uses
-Dhan's official `GET /v2/RenewToken` and its `dhanClientId` header.
+Dhan's official `GET /v2/RenewToken` and its `dhanClientId` header. A live
+23 November 2026 response used `token`, `createTime` and `expiryTime`; the parser
+supports this observed shape as well as the documented `accessToken` form.
+Both require matching-account profile verification before quote use.
 
 The worker checks once a minute while running and renews when at most eight
 hours remain. A separate free cron-job.org job wakes `/ping` every six hours,
