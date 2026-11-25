@@ -36,6 +36,8 @@ class Config:
     st_factor: float = 4.0
     wma_period: int = 30
     square_off: str = "15:15"
+    force_square_off: bool = True
+    entry_cutoff: bool = True
     quantity: float = 1.0
     point_value: float = 1.0
     initial_capital: float = 500000.0
@@ -197,7 +199,9 @@ def calculate_signals(data, cfg):
 
 
 def simulate(signals, cfg):
-    """Ordinary market orders: next available same-day bar open.
+    """Ordinary market orders: next available bar open.
+
+    force_square_off=False permits orders and positions to carry overnight.
 
     Forced exit: 15:14 candle CLOSE, timestamped 15:15. Earlier official
     session closes use their last minute CLOSE. No last-row forced liquidation.
@@ -227,7 +231,7 @@ def simulate(signals, cfg):
 
     for stamp, row in signals.iterrows():
         day = stamp.date()
-        if previous_day is not None and day != previous_day:
+        if cfg.force_square_off and previous_day is not None and day != previous_day:
             if position is not None:
                 raise ValueError(f"Missing square-off candle on {previous_day}; refusing an invented exit or overnight carry")
             if pending:
@@ -238,24 +242,24 @@ def simulate(signals, cfg):
         # consulted when choosing its open fill.
         if pending is not None:
             action, signal_bar = pending
-            if action == "BUY" and stamp < row.cutoff and position is None:
+            if action == "BUY" and (not (cfg.force_square_off or cfg.entry_cutoff) or stamp < row.cutoff) and position is None:
                 fill = float(row.open)+cfg.slippage_points
                 position = {"entry_time": stamp, "entry_price": fill, "entry_fee": fee(fill), "signal_bar": signal_bar}
                 events.append({"time": stamp, "action": "BUY_FILLED", "reason": "NEXT_BAR_OPEN"})
             elif action == "SELL" and position is not None:
-                if stamp >= row.cutoff:
+                if cfg.force_square_off and stamp >= row.cutoff:
                     raise ValueError("Missing exact square-off bar; exit would be late")
                 close_position(stamp, float(row.open), "SBSM_EXIT", signal_bar)
             else:
                 events.append({"time": stamp, "action": "ORDER_IGNORED", "reason": "CUTOFF_OR_FLAT_OR_ALREADY_LONG"})
             pending = None
         bar_close = stamp + pd.Timedelta(minutes=1)
-        if stamp >= row.cutoff and position is not None:
+        if cfg.force_square_off and stamp >= row.cutoff and position is not None:
             raise ValueError(f"Open position passed square-off on {day}; missing cutoff candle")
         # Signal state was calculated on ALL valid session bars; forced flat
         # does not reset trendState, cooldown, active cycle, ATR or WMA.
         if row.buy_signal:
-            if bar_close < row.cutoff:
+            if not (cfg.force_square_off or cfg.entry_cutoff) or bar_close < row.cutoff:
                 if position is None:
                     pending = ("BUY", stamp)
                 events.append({"time": bar_close, "action": "BUY_SIGNAL", "reason": "SBSM_BUY"})
@@ -263,9 +267,9 @@ def simulate(signals, cfg):
                 events.append({"time": bar_close, "action": "BUY_BLOCKED", "reason": "INTRADAY_CUTOFF"})
         elif row.sell_signal:
             events.append({"time": bar_close, "action": "SELL_SIGNAL", "reason": "SBSM_SELL"})
-            if position is not None and bar_close < row.cutoff:
+            if position is not None and (not cfg.force_square_off or bar_close < row.cutoff):
                 pending = ("SELL", stamp)
-        if bar_close == row.cutoff:
+        if cfg.force_square_off and bar_close == row.cutoff:
             pending = None
             if position is not None:
                 reason = "SQUARE_OFF_" + cfg.square_off.replace(":", "") if row.cutoff.strftime("%H:%M") == cfg.square_off else "EARLY_SESSION_CLOSE"
@@ -295,14 +299,21 @@ def summary(trades, equity, position, pending, cfg):
             "pnl_units": "index points when quantity=1 and point_value=1; not futures/options returns"}
 
 
-def run(csv_path, output, cfg, overrides=None):
+def run(csv_path, output, cfg, overrides=None, start=None):
     data, quality = load_csv(Path(csv_path), cfg, overrides)
     signals = calculate_signals(data, cfg)
+    if start is not None:
+        start = pd.Timestamp(start)
+        start = start.tz_localize(TZ) if start.tzinfo is None else start.tz_convert(TZ)
+        signals = signals.loc[signals.index >= start].copy()
+        if signals.empty:
+            raise ValueError("No candles in requested execution period")
     trades, events, equity, position, pending = simulate(signals, cfg)
     metrics = summary(trades, equity, position, pending, cfg)
     metrics.update({"parameters": asdict(cfg), "input_quality": quality,
                     "first_bar": str(signals.index[0]), "last_bar": str(signals.index[-1]),
-                    "signal_timeframe_minutes": 1, "input_sha256": hashlib.sha256(Path(csv_path).read_bytes()).hexdigest(),
+                    "signal_timeframe_minutes": 1, "execution_start": str(start) if start is not None else None,
+                    "period_start_position": "flat; all earlier indicator/signal state preserved", "input_sha256": hashlib.sha256(Path(csv_path).read_bytes()).hexdigest(),
                     "pine_bar_parity_verified": False,
                     "comparison_note": "Signal formulas ported from project Pine; actual bar-by-bar TradingView comparison not performed. Provider history and warm-up can differ."})
     output = Path(output); output.mkdir(parents=True, exist_ok=True)
@@ -325,13 +336,17 @@ def run(csv_path, output, cfg, overrides=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", type=Path)
+    parser.add_argument("--start", help="Execution start in IST; earlier data still warms indicators/state")
     parser.add_argument("--upload", action="store_true", help="Upload a CSV in Google Colab")
     parser.add_argument("--download", action="store_true", help="Download the result ZIP in Google Colab")
     parser.add_argument("--output", type=Path, default=Path("sbsm_results"))
     parser.add_argument("--sessions-json", type=Path, help='Date -> [["open", "close"], ...] overrides')
     for field in Config.__dataclass_fields__.values():
         default = field.default
-        parser.add_argument("--"+field.name.replace("_", "-"), type=type(default), default=default)
+        if isinstance(default, bool):
+            parser.add_argument("--"+field.name.replace("_", "-"), action=argparse.BooleanOptionalAction, default=default)
+        else:
+            parser.add_argument("--"+field.name.replace("_", "-"), type=type(default), default=default)
     args = parser.parse_args()
     if args.upload:
         from google.colab import files
@@ -344,7 +359,7 @@ def main():
         parser.error("Supply --csv path.csv, or use --upload in Google Colab")
     cfg = Config(**{name: getattr(args, name) for name in Config.__dataclass_fields__})
     overrides = json.loads(args.sessions_json.read_text()) if args.sessions_json else None
-    metrics, archive = run(args.csv, args.output, cfg, overrides)
+    metrics, archive = run(args.csv, args.output, cfg, overrides, args.start)
     print(json.dumps({k: v for k, v in metrics.items() if k not in ("open_position_at_data_end", "pending_order_at_data_end")}, indent=2, default=str))
     print(f"Results: {archive.resolve()}")
     if args.download:

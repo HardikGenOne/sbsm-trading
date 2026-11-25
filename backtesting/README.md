@@ -147,3 +147,31 @@ Reference documentation:
 - https://nsearchives.nseindia.com/content/circulars/MSD60677.pdf
 - https://nsearchives.nseindia.com/content/circulars/MSD61893.pdf
 - https://nsearchives.nseindia.com/content/circulars/CMTR70319.pdf
+
+
+## Optional overnight mode and execution date range
+
+To remove only forced liquidation while retaining the existing 15:15 entry cutoff, use:
+
+```sh
+python sbsm_intraday.py --csv NIFTY.csv --start 2026-10-12 --no-force-square-off --output overnight_results
+```
+
+This mode retains entries before 15:15, carries positions overnight, and fills
+SBSM exits at the next available bar open, including the next session when a
+signal occurs on the last bar. It changes only the forced-exit policy. Exits occur
+only on SBSM SELL signals. Positions still open when the data ends remain open;
+no final artificial exit is added. The 15:15 policy remains the default unless
+this flag is explicitly supplied. In the notebook, set `force_square_off=False`
+and keep `entry_cutoff=True`.
+
+For unrestricted original Pine-style overnight execution, also pass
+`--no-entry-cutoff` (or set `entry_cutoff=False` in the notebook). That explicitly
+allows late-session BUY signals and next-session-open BUY fills. A comparison
+that changes only forced exits should keep the entry cutoff enabled.
+
+`--start` restricts execution, not calculation: all earlier CSV data still warms
+ATR/WMA and reconstructs Pine trend/cooldown/cycle state. The portfolio starts
+flat at the requested execution date; no trade opened before that date is
+imported. This makes the requested period a fresh execution test with warm
+indicators. Ordinary session filtering still applies in either mode.

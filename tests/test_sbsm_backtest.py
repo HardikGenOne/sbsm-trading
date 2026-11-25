@@ -119,3 +119,39 @@ def test_flat_sell_updates_cooldown_and_daily_state_is_not_reset():
     assert out.trend_state.iloc[2]==-1 and out.last_signal_bar.iloc[2]==2
     assert out.trend_state.iloc[3]==-1 and out.last_signal_bar.iloc[3]==2
     assert not out.sell_signal.any()
+
+
+def test_no_squareoff_holds_overnight_and_exits_only_on_signal():
+    df=bars(['2026-11-23 15:13','2026-11-23 15:14','2026-11-23 15:15','2026-11-24 09:15','2026-11-24 09:16'],opens=[100,101,102,110,111],buys=(0,),sells=(3,))
+    trades,_,_,position,_=simulate(df,Config(force_square_off=False))
+    assert len(trades)==1 and position is None
+    assert trades.iloc[0].entry_price==101 and trades.iloc[0].exit_price==111
+    assert trades.iloc[0].exit_reason=='SBSM_EXIT'
+    assert trades.iloc[0].entry_time.date()!=trades.iloc[0].exit_time.date()
+
+
+def test_no_squareoff_allows_late_signal_to_fill_next_session_open():
+    df=bars(['2026-11-23 15:29','2026-11-24 09:15'],opens=[100,120],buys=(0,))
+    trades,events,_,position,pending=simulate(df,Config(force_square_off=False,entry_cutoff=False))
+    assert len(trades)==0 and pending is None
+    assert position['entry_price']==120 and position['entry_time'].day==24
+    assert 'BUY_BLOCKED' not in set(events.action)
+
+
+def test_period_execution_starts_flat_but_preserves_indicator_warmup(tmp_path):
+    from backtesting.sbsm_intraday import run
+    index=pd.date_range('2026-11-23 09:15',periods=12,freq='min',tz='Asia/Kolkata')
+    p=tmp_path/'prices.csv'
+    pd.DataFrame({'datetime_ist':index,'open':np.arange(100,112),'high':np.arange(101,113),'low':np.arange(99,111),'close':np.arange(100,112)}).to_csv(p,index=False)
+    cfg=Config(wma_period=5,atr_period=3,force_square_off=False)
+    metrics,_=run(p,tmp_path/'results',cfg,start='2026-11-23 09:20')
+    out=pd.read_csv(tmp_path/'results/bars_and_signals.csv')
+    assert out.iloc[0].wma==pytest.approx((101+2*102+3*103+4*104+5*105)/15)
+    assert str(metrics['execution_start']).startswith('2026-11-23 09:20')
+
+
+def test_disabling_squareoff_alone_preserves_existing_entry_cutoff():
+    df=bars(['2026-11-23 15:14','2026-11-23 15:15','2026-11-24 09:15'],buys=(0,))
+    trades,events,_,position,pending=simulate(df,Config(force_square_off=False))
+    assert len(trades)==0 and position is None and pending is None
+    assert 'BUY_BLOCKED' in set(events.action)
