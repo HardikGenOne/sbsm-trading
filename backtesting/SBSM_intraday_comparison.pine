@@ -1,0 +1,62 @@
+//@version=5
+// Offline comparison only. No webhooks or alert() calls.
+strategy("SBSM NIFTY 1m intraday comparison", overlay=true, initial_capital=500000, default_qty_type=strategy.fixed, default_qty_value=1, pyramiding=0, calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=false)
+lookback = input.int(3, "Breakout lookback", minval=1)
+gapLimit = input.float(0.16, "Maximum gap above previous high (%)", minval=0)
+noiseBars = input.int(25, "Signal cooldown (includes exits)", minval=0)
+stPeriod = input.int(25, "Supertrend ATR period", minval=1)
+stFactor = input.float(4.0, "Supertrend factor", minval=0.01)
+maPeriod = input.int(30, "WMA period", minval=1)
+if not chart.is_standard or not timeframe.isminutes or timeframe.multiplier != 1
+    runtime.error("Use standard 1-minute candles for this offline comparison")
+[stValue, stDirection] = ta.supertrend(stFactor, stPeriod)
+maValue = ta.wma(close, maPeriod)
+prevGreenLine = ta.highest(high[1], lookback)[1]
+prevRedLine = ta.lowest(low[1], lookback)[1]
+setupBuy = close[1] > prevGreenLine and stDirection[1] < 0 and close[1] > maValue[1]
+setupSell = close[1] < prevRedLine
+currentGap = (open - high[1]) / high[1] * 100
+var int trendState = 0
+var int lastSignalBar = 0
+var bool activeCycle = false
+isCleanChart = bar_index - lastSignalBar >= noiseBars
+bool buySignal = false
+bool sellSignal = false
+// End-of-day exceptions are known session closes, not inferred last CSV rows.
+string dayKey = str.format_time(time, "yyyy-MM-dd", "Asia/Kolkata")
+int cutoff = timestamp("Asia/Kolkata", year, month, dayofmonth, 15, 15)
+if dayKey == "2024-03-02" or dayKey == "2024-05-18"
+    cutoff := timestamp("Asia/Kolkata", year, month, dayofmonth, 12, 30)
+else if dayKey == "2025-10-21"
+    cutoff := timestamp("Asia/Kolkata", year, month, dayofmonth, 14, 45)
+if barstate.isconfirmed
+    if setupBuy and currentGap <= gapLimit and trendState != 1 and isCleanChart
+        trendState := 1
+        lastSignalBar := bar_index
+        activeCycle := true
+        buySignal := true
+        if time_close < cutoff
+            strategy.entry("Long", strategy.long, disable_alert=true)
+    else if setupSell and trendState != -1 and isCleanChart
+        trendState := -1
+        lastSignalBar := bar_index
+        if activeCycle
+            activeCycle := false
+            sellSignal := true
+            if time_close < cutoff
+                strategy.close("Long", disable_alert=true)
+    // 15:14 candle closes at 15:15. This forced close is the only
+    // immediately-filled order; ordinary SBSM orders use the next open.
+    if time_close == cutoff
+        strategy.cancel_all()
+        strategy.close_all(comment="Intraday square-off", immediately=true, disable_alert=true)
+plot(maValue, "WMA", color=color.orange)
+plot(stValue, "Supertrend", color=stDirection < 0 ? color.green : color.red)
+plot(prevGreenLine, "Previous breakout high", display=display.data_window)
+plot(prevRedLine, "Previous breakout low", display=display.data_window)
+plot(stDirection, "ST direction", display=display.data_window)
+plot(ta.atr(stPeriod), "ATR", display=display.data_window)
+plot(buySignal ? 1 : 0, "BUY signal", display=display.data_window)
+plot(sellSignal ? 1 : 0, "SELL signal", display=display.data_window)
+plot(trendState, "Trend state", display=display.data_window)
+plot(lastSignalBar, "Last signal bar", display=display.data_window)
